@@ -4,15 +4,17 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type { ExtractedItem } from "@workspace/api-client-react";
 
+import { useAuth } from "@/lib/auth";
 import {
   computeAverageDaysBetweenPurchases,
   isPredictedNeeded,
 } from "@/lib/predictions";
-import { newId, storage } from "@/lib/storage";
+import { loadStore, newId, saveStore, type StoreSnapshot } from "@/lib/storage";
 import type {
   Category,
   PantryItem,
@@ -76,47 +78,92 @@ function rebuildPredictedShoppingList(
 }
 
 export function PantryProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading: authLoading, user } = useAuth();
   const [pantry, setPantry] = useState<PantryItem[]>([]);
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const stateRef = useRef<StoreSnapshot>({
+    pantry: [],
+    scans: [],
+    shoppingList: [],
+  });
+  stateRef.current = { pantry, scans, shoppingList };
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canSaveRef = useRef(false);
+
+  const queueSave = useCallback(() => {
+    if (!canSaveRef.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveStore(stateRef.current).catch((err) => {
+        console.warn("Failed to sync store:", err);
+      });
+    }, 350);
+  }, []);
+
   useEffect(() => {
-    let active = true;
-    (async () => {
-      const [p, s, l] = await Promise.all([
-        storage.getPantry(),
-        storage.getScans(),
-        storage.getShoppingList(),
-      ]);
-      if (!active) return;
-      setPantry(p);
-      setScans(s);
-      const refreshed = rebuildPredictedShoppingList(p, l);
-      setShoppingList(refreshed);
-      await storage.setShoppingList(refreshed);
+    if (authLoading) return;
+
+    canSaveRef.current = false;
+
+    if (!isAuthenticated) {
+      setPantry([]);
+      setScans([]);
+      setShoppingList([]);
       setLoading(false);
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    (async () => {
+      try {
+        const data = await loadStore();
+        if (!active) return;
+        const refreshed = rebuildPredictedShoppingList(
+          data.pantry,
+          data.shoppingList,
+        );
+        setPantry(data.pantry);
+        setScans(data.scans);
+        setShoppingList(refreshed);
+        canSaveRef.current = true;
+        if (
+          JSON.stringify(refreshed) !== JSON.stringify(data.shoppingList)
+        ) {
+          queueSave();
+        }
+      } catch (err) {
+        console.warn("Failed to load store:", err);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
+
     return () => {
       active = false;
     };
-  }, []);
+  }, [isAuthenticated, authLoading, user?.id, queueSave]);
 
   const persistPantry = useCallback(
     async (next: PantryItem[]) => {
       setPantry(next);
-      await storage.setPantry(next);
-      const refreshed = rebuildPredictedShoppingList(next, shoppingList);
-      setShoppingList(refreshed);
-      await storage.setShoppingList(refreshed);
+      setShoppingList((cur) => rebuildPredictedShoppingList(next, cur));
+      queueSave();
     },
-    [shoppingList],
+    [queueSave],
   );
 
-  const persistShopping = useCallback(async (next: ShoppingListItem[]) => {
-    setShoppingList(next);
-    await storage.setShoppingList(next);
-  }, []);
+  const persistShopping = useCallback(
+    async (next: ShoppingListItem[]) => {
+      setShoppingList(next);
+      queueSave();
+    },
+    [queueSave],
+  );
 
   const addScannedItems = useCallback<PantryContextValue["addScannedItems"]>(
     async (items, sourceType, storeName, purchaseDate) => {
@@ -176,8 +223,6 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      await persistPantry(next);
-
       const scan: ScanRecord = {
         id: newId(),
         scannedAt: now,
@@ -186,12 +231,15 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         itemCount: items.length,
       };
       const nextScans = [scan, ...scans].slice(0, 100);
+
+      setPantry(next);
       setScans(nextScans);
-      await storage.setScans(nextScans);
+      setShoppingList((cur) => rebuildPredictedShoppingList(next, cur));
+      queueSave();
 
       return scan;
     },
-    [pantry, persistPantry, scans],
+    [pantry, scans, queueSave],
   );
 
   const markConsumed = useCallback(
@@ -264,11 +312,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
   }, [persistShopping, shoppingList]);
 
   const resetAll = useCallback(async () => {
-    await storage.clearAll();
     setPantry([]);
     setScans([]);
     setShoppingList([]);
-  }, []);
+    queueSave();
+  }, [queueSave]);
 
   const value = useMemo<PantryContextValue>(
     () => ({

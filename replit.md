@@ -9,17 +9,19 @@ Grocery Tracker — an Expo (React Native) mobile app that uses AI vision to ext
 This is a pnpm monorepo with the following workspace structure:
 
 - **`artifacts/grocery-tracker`** — The Expo mobile app (also runs on web).
-  - 4 tabs: Home, Pantry, Scan, Shop.
-  - Local persistence via `AsyncStorage` (no backend database).
-  - State managed by `PantryContext` (`contexts/PantryContext.tsx`).
-  - Image capture via `expo-image-picker` (camera + library).
-  - Theme: sage green (`#2f6d3f`) on cream (`#fbf8f1`); Inter font family.
-  - Server URL: configured via `setBaseUrl(EXPO_PUBLIC_DOMAIN)` in `app/_layout.tsx`.
+  - 5 tabs: Home, Pantry, Scan, Shop, Insights.
+  - Auth-gated: unauthenticated users see `app/login.tsx`; auth state managed by `lib/auth.tsx` (Replit OIDC via `expo-auth-session` + `expo-secure-store`).
+  - Persistence is **server-synced** through `lib/storage.ts` (calls `GET/PUT /api/me/store`). `PantryContext` loads on login, debounce-saves on every mutation, and clears on logout.
+  - Auth token: `setAuthTokenGetter` reads `auth_session_token` from `SecureStore` so the generated API client attaches Bearer auth.
+  - Profile + log out UI lives in the Insights tab (`components/ProfileCard.tsx`).
+  - Image capture via `expo-image-picker`; barcode via `expo-camera` + Open Food Facts.
+  - Theme: sage green on cream; Inter font family.
 
 - **`artifacts/api-server`** — Express API.
-  - `POST /api/analyze-receipt` accepts `{ imageBase64, mimeType, sourceType }` and returns `{ items: ExtractedItem[], storeName?, purchaseDate? }`.
-  - Uses Gemini `gemini-2.5-flash` with vision input + JSON schema response (via `@workspace/integrations-gemini-ai`).
-  - JSON body limit raised to 20 MB to accept base64 images.
+  - Wired with `cors({credentials:true})`, `cookieParser`, `authMiddleware` (sessions + Bearer token), JSON body limit 20 MB.
+  - `POST /api/analyze-receipt` — Gemini `gemini-2.5-flash` vision → `ExtractedItem[]`.
+  - `routes/auth.ts` — Replit Auth OIDC routes (`/api/login`, `/api/callback`, `/api/logout`, `/api/auth/user`, `/api/mobile-auth/token-exchange`, etc.).
+  - `routes/me.ts` — `GET/PUT /api/me/store` returns/persists `{ pantry, scans, shoppingList }` for the current user (gated by `req.isAuthenticated()`).
 
 - **`lib/api-spec`** — OpenAPI source of truth (`openapi.yaml`).
   - Schemas: `ExtractedItem`, `ReceiptInput`, `ReceiptResult`, `ApiError`.
@@ -29,6 +31,11 @@ This is a pnpm monorepo with the following workspace structure:
 - **`lib/api-client-react`** / **`lib/api-zod`** — Generated clients consumed by the mobile app and server respectively.
 
 - **`lib/integrations-gemini-ai`** — Replit-managed Gemini integration. Env vars `AI_INTEGRATIONS_GEMINI_BASE_URL` / `AI_INTEGRATIONS_GEMINI_API_KEY` provided automatically.
+
+- **`lib/db`** — Drizzle schema + Postgres client.
+  - `schema/auth.ts` — `users` and `sessions` tables (Replit Auth template).
+  - `schema/user-data.ts` — `user_data` (one row per user, JSONB columns `pantry`, `scans`, `shopping_list`, FK to `users` with cascade).
+  - Push schema: `pnpm --filter @workspace/db run db:push`.
 
 ## Domain Model
 
@@ -54,3 +61,5 @@ This is a pnpm monorepo with the following workspace structure:
 - Initial build of Grocery Tracker mobile app with full scan → review → pantry → shopping flow.
 - Added `/analyze-receipt` endpoint backed by Gemini 2.5 Flash vision.
 - Established sage/cream theme and Inter typography.
+- Added Insights tab (top items, cadence, predicted restocks, category breakdown).
+- Added Replit Auth + Postgres-backed cloud sync: login screen, auth-gated app, `GET/PUT /api/me/store`, and profile/log-out card in Insights. Local `AsyncStorage` was replaced by API-backed persistence.

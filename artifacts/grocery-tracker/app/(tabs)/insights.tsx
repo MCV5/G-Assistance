@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/EmptyState";
+import { ProfileCard } from "@/components/ProfileCard";
 import { SectionHeader } from "@/components/SectionHeader";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
@@ -57,6 +58,9 @@ export default function InsightsScreen() {
             title="No insights yet"
             subtitle="Scan a few receipts and we'll show your top items, purchase rhythm, and category breakdown."
           />
+        </View>
+        <View style={{ paddingHorizontal: 20, paddingBottom: insets.bottom + 120 }}>
+          <ProfileCard />
         </View>
       </View>
     );
@@ -381,6 +385,11 @@ export default function InsightsScreen() {
           </View>
         </View>
       )}
+
+      <View style={{ marginTop: 32 }}>
+        <SectionHeader title="Account" caption="Your data syncs to this account" />
+        <ProfileCard />
+      </View>
     </ScrollView>
   );
 }

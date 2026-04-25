@@ -17,6 +17,7 @@ import type {
   Category,
   PantryItem,
   ScanRecord,
+  ScanSource,
   ShoppingListItem,
 } from "@/lib/types";
 
@@ -27,7 +28,7 @@ interface PantryContextValue {
   loading: boolean;
   addScannedItems: (
     items: ExtractedItem[],
-    sourceType: "receipt" | "bag" | "cart",
+    sourceType: ScanSource,
     storeName?: string,
     purchaseDate?: string,
   ) => Promise<ScanRecord>;

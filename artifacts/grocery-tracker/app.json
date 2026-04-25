@@ -28,7 +28,13 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Grocery Tracker to use the camera to scan barcodes."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

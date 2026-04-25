@@ -21,13 +21,16 @@ import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
-import { CATEGORIES, type Category } from "@/lib/types";
+import { CATEGORIES, type Category, type ScanSource } from "@/lib/types";
 
 interface ScanPayload {
   items: ExtractedItem[];
-  sourceType: "receipt" | "bag" | "cart";
+  sourceType: ScanSource;
   storeName?: string;
   purchaseDate?: string;
+  fromBarcode?: boolean;
+  notFound?: boolean;
+  barcode?: string;
 }
 
 export default function ScanReviewScreen() {
@@ -93,13 +96,18 @@ export default function ScanReviewScreen() {
         ListHeaderComponent={
           <View style={{ marginBottom: 16 }}>
             <Text style={[styles.title, { color: colors.foreground }]}>
-              {items.length} item{items.length === 1 ? "" : "s"} found
+              {initial.fromBarcode
+                ? initial.notFound
+                  ? "Barcode not in database"
+                  : "Product found"
+                : `${items.length} item${items.length === 1 ? "" : "s"} found`}
             </Text>
             <Text style={[styles.sub, { color: colors.mutedForeground }]}>
-              {initial.storeName
-                ? `From ${initial.storeName}. `
-                : ""}
-              Tap any item to edit. Long-press to remove.
+              {initial.fromBarcode && initial.notFound
+                ? `We couldn't find barcode ${initial.barcode ?? ""} in our database. Edit the name and category below, then add it to your pantry.`
+                : initial.storeName
+                  ? `From ${initial.storeName}. Tap any item to edit. Long-press to remove.`
+                  : "Tap any item to edit. Long-press to remove."}
             </Text>
           </View>
         }

@@ -25,11 +25,13 @@ export const CATEGORIES: Category[] = [
   "Other",
 ];
 
+export type ScanSource = "receipt" | "bag" | "cart" | "barcode";
+
 export interface Purchase {
   date: string;
   quantity: number;
   unit: string;
-  source: "receipt" | "bag" | "cart" | "manual";
+  source: ScanSource | "manual";
 }
 
 export interface PantryItem {
@@ -49,7 +51,7 @@ export interface PantryItem {
 export interface ScanRecord {
   id: string;
   scannedAt: string;
-  sourceType: "receipt" | "bag" | "cart";
+  sourceType: ScanSource;
   storeName?: string;
   itemCount: number;
 }

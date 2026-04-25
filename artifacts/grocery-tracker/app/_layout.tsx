@@ -37,6 +37,13 @@ function RootLayoutNav() {
           headerShown: true,
         }}
       />
+      <Stack.Screen
+        name="barcode-scan"
+        options={{
+          presentation: "fullScreenModal",
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

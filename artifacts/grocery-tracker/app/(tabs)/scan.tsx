@@ -288,6 +288,43 @@ export default function ScanScreen() {
           </>
         )}
       </View>
+
+      <View
+        style={[
+          styles.divider,
+          { backgroundColor: colors.border },
+        ]}
+      />
+
+      <Pressable
+        onPress={() => router.push("/barcode-scan")}
+        style={({ pressed }) => [
+          styles.barcodeRow,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            opacity: pressed ? 0.85 : 1,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.barcodeIcon,
+            { backgroundColor: `${colors.accent}33` },
+          ]}
+        >
+          <Feather name="maximize" size={20} color={colors.accentForeground} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.barcodeTitle, { color: colors.foreground }]}>
+            Scan a barcode instead
+          </Text>
+          <Text style={[styles.barcodeSub, { color: colors.mutedForeground }]}>
+            Quickly add a single packaged item
+          </Text>
+        </View>
+        <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+      </Pressable>
     </ScrollView>
   );
 }
@@ -402,5 +439,33 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+  },
+  divider: {
+    height: 1,
+    marginVertical: 24,
+  },
+  barcodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  barcodeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  barcodeTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+  },
+  barcodeSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    marginTop: 2,
   },
 });

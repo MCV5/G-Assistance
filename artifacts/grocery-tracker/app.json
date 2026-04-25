@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Grocery Tracker",
-    "slug": "grocery-tracker",
+    "name": "Gassistant",
+    "slug": "gassistant",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "grocery-tracker",
+    "scheme": "gassistant",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -14,9 +14,12 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.gassistant.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.gassistant.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

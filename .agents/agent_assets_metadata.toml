@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "06rFrtR7PcHUDuIDrDPBF"
+uri = "file://artifacts/grocery-tracker/assets/images/icon.png"
+type = "image"
+title = "grocery app icon"

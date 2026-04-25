@@ -14,3 +14,53 @@ import * as zod from "zod";
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
 });
+
+/**
+ * Uses AI vision to extract grocery items from a photo of a receipt, shopping bag, or cart.
+ * @summary Analyze a grocery receipt or shopping bag photo
+ */
+export const AnalyzeReceiptBody = zod.object({
+  imageBase64: zod
+    .string()
+    .describe("Base64-encoded image data (without the data URI prefix)"),
+  mimeType: zod
+    .string()
+    .describe("Mime type of the image (e.g., image\/jpeg, image\/png)"),
+  sourceType: zod
+    .enum(["receipt", "bag", "cart"])
+    .describe("What the image is - receipt, bag, or cart"),
+});
+
+export const AnalyzeReceiptResponse = zod.object({
+  items: zod.array(
+    zod.object({
+      name: zod.string().describe("Normalized name of the item"),
+      category: zod
+        .string()
+        .describe(
+          "Category like Produce, Dairy, Meat, Pantry, Bakery, Beverages, Frozen, Snacks, Household, Personal Care, Other",
+        ),
+      quantity: zod
+        .number()
+        .describe("Quantity of the item (defaults to 1 if unknown)"),
+      unit: zod
+        .string()
+        .describe(
+          "Unit of measure (e.g., piece, dozen, lb, kg, oz, ml, l). Defaults to piece.",
+        ),
+      estimatedShelfLifeDays: zod
+        .number()
+        .describe(
+          "Estimated shelf life in days. Used as a default until usage patterns are learned.",
+        ),
+    }),
+  ),
+  storeName: zod
+    .string()
+    .optional()
+    .describe("Store name detected on the receipt, if available"),
+  purchaseDate: zod.coerce
+    .date()
+    .optional()
+    .describe("Purchase date detected on the receipt, if available"),
+});

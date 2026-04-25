@@ -5,18 +5,26 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  ApiError,
+  HealthStatus,
+  ReceiptInput,
+  ReceiptResult,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType } from "../custom-fetch";
+import type { ErrorType, BodyType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -99,3 +107,90 @@ export function useHealthCheck<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * Uses AI vision to extract grocery items from a photo of a receipt, shopping bag, or cart.
+ * @summary Analyze a grocery receipt or shopping bag photo
+ */
+export const getAnalyzeReceiptUrl = () => {
+  return `/api/analyze-receipt`;
+};
+
+export const analyzeReceipt = async (
+  receiptInput: ReceiptInput,
+  options?: RequestInit,
+): Promise<ReceiptResult> => {
+  return customFetch<ReceiptResult>(getAnalyzeReceiptUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(receiptInput),
+  });
+};
+
+export const getAnalyzeReceiptMutationOptions = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzeReceipt>>,
+    TError,
+    { data: BodyType<ReceiptInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof analyzeReceipt>>,
+  TError,
+  { data: BodyType<ReceiptInput> },
+  TContext
+> => {
+  const mutationKey = ["analyzeReceipt"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof analyzeReceipt>>,
+    { data: BodyType<ReceiptInput> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return analyzeReceipt(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type AnalyzeReceiptMutationResult = NonNullable<
+  Awaited<ReturnType<typeof analyzeReceipt>>
+>;
+export type AnalyzeReceiptMutationBody = BodyType<ReceiptInput>;
+export type AnalyzeReceiptMutationError = ErrorType<ApiError>;
+
+/**
+ * @summary Analyze a grocery receipt or shopping bag photo
+ */
+export const useAnalyzeReceipt = <
+  TError = ErrorType<ApiError>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzeReceipt>>,
+    TError,
+    { data: BodyType<ReceiptInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof analyzeReceipt>>,
+  TError,
+  { data: BodyType<ReceiptInput> },
+  TContext
+> => {
+  return useMutation(getAnalyzeReceiptMutationOptions(options));
+};

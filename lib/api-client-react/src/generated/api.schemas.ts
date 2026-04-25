@@ -8,3 +8,49 @@
 export interface HealthStatus {
   status: string;
 }
+
+/**
+ * What the image is - receipt, bag, or cart
+ */
+export type ReceiptInputSourceType =
+  (typeof ReceiptInputSourceType)[keyof typeof ReceiptInputSourceType];
+
+export const ReceiptInputSourceType = {
+  receipt: "receipt",
+  bag: "bag",
+  cart: "cart",
+} as const;
+
+export interface ReceiptInput {
+  /** Base64-encoded image data (without the data URI prefix) */
+  imageBase64: string;
+  /** Mime type of the image (e.g., image/jpeg, image/png) */
+  mimeType: string;
+  /** What the image is - receipt, bag, or cart */
+  sourceType: ReceiptInputSourceType;
+}
+
+export interface ExtractedItem {
+  /** Normalized name of the item */
+  name: string;
+  /** Category like Produce, Dairy, Meat, Pantry, Bakery, Beverages, Frozen, Snacks, Household, Personal Care, Other */
+  category: string;
+  /** Quantity of the item (defaults to 1 if unknown) */
+  quantity: number;
+  /** Unit of measure (e.g., piece, dozen, lb, kg, oz, ml, l). Defaults to piece. */
+  unit: string;
+  /** Estimated shelf life in days. Used as a default until usage patterns are learned. */
+  estimatedShelfLifeDays: number;
+}
+
+export interface ReceiptResult {
+  items: ExtractedItem[];
+  /** Store name detected on the receipt, if available */
+  storeName?: string;
+  /** Purchase date detected on the receipt, if available */
+  purchaseDate?: string;
+}
+
+export interface ApiError {
+  error: string;
+}

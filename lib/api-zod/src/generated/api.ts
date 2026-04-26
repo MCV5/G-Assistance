@@ -59,6 +59,11 @@ export const SignupResponse = zod.object({
     profileImageUrl: zod.string().url().nullable(),
   }),
   token: zod.string(),
+  recoveryCode: zod
+    .string()
+    .describe(
+      "One-time backup code shown to the user. Used to reset a forgotten password.",
+    ),
 });
 
 /**
@@ -79,6 +84,37 @@ export const LoginResponse = zod.object({
     profileImageUrl: zod.string().url().nullable(),
   }),
   token: zod.string(),
+});
+
+/**
+ * @summary Reset a forgotten password with a recovery code
+ */
+
+export const resetPasswordBodyNewPasswordMin = 6;
+
+export const ResetPasswordBody = zod.object({
+  email: zod.string().email(),
+  recoveryCode: zod.string().min(1),
+  newPassword: zod.string().min(resetPasswordBodyNewPasswordMin),
+});
+
+export const ResetPasswordResponse = zod.object({
+  success: zod.boolean(),
+  recoveryCode: zod.string(),
+});
+
+/**
+ * @summary Generate a new recovery code for the current user
+ */
+export const RegenerateRecoveryCodeHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const RegenerateRecoveryCodeResponse = zod.object({
+  recoveryCode: zod.string(),
 });
 
 /**

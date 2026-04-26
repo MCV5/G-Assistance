@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -54,6 +55,7 @@ function isValidEmail(value: string): boolean {
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { login, signup } = useAuth();
 
   const [mode, setMode] = useState<Mode>("login");
@@ -234,6 +236,20 @@ export default function LoginScreen() {
               </Text>
             </Text>
           </Pressable>
+
+          {mode === "login" && (
+            <Pressable
+              onPress={() => router.push("/forgot-password")}
+              style={styles.forgotHint}
+              hitSlop={6}
+            >
+              <Text
+                style={[styles.forgotText, { color: colors.primary }]}
+              >
+                Forgot your password?
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.previewSection}>
@@ -429,6 +445,14 @@ const styles = StyleSheet.create({
   },
   switchText: {
     fontFamily: "Inter_400Regular",
+    fontSize: 13,
+  },
+  forgotHint: {
+    marginTop: 8,
+    alignItems: "center",
+  },
+  forgotText: {
+    fontFamily: "Inter_600SemiBold",
     fontSize: 13,
   },
   previewSection: {

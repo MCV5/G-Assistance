@@ -64,3 +64,4 @@ This is a pnpm monorepo with the following workspace structure:
 - Added Insights tab (top items, cadence, predicted restocks, category breakdown).
 - Added Postgres-backed cloud sync: `GET/PUT /api/me/store` and a profile/log-out card in Insights. Local `AsyncStorage` was replaced by API-backed persistence.
 - Added email + password authentication (signup / login / logout) with bcrypt + opaque session tokens. The login screen shows tabs for log in vs sign up plus a 4-step "How it works" preview.
+- Added recovery codes for password reset (no email service required). Signup returns a one-time `recoveryCode` shown on a "save your code" screen; `POST /api/auth/reset-password` validates `{email, recoveryCode, newPassword}` and rotates the code; `POST /api/auth/recovery-code` (authed) lets a user generate a fresh code from the profile card. New `app/forgot-password.tsx` screen + "Forgot your password?" link on login.

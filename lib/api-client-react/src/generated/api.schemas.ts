@@ -77,6 +77,30 @@ export interface AuthSuccess {
   token: string;
 }
 
+export interface SignupSuccess {
+  user: AuthUser;
+  token: string;
+  /** One-time backup code shown to the user. Used to reset a forgotten password. */
+  recoveryCode: string;
+}
+
+export interface PasswordResetRequest {
+  email: string;
+  /** @minLength 1 */
+  recoveryCode: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
+export interface PasswordResetSuccess {
+  success: true;
+  recoveryCode: string;
+}
+
+export interface RecoveryCodeSuccess {
+  recoveryCode: string;
+}
+
 export const LogoutSuccessValue = {
   success: true,
 } as const;

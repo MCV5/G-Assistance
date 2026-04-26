@@ -73,7 +73,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthSuccess'
+                $ref: '#/components/schemas/SignupSuccess'
         '400':
           description: Invalid input (missing fields, weak password, etc.)
           content:
@@ -106,6 +106,57 @@ paths:
                 $ref: '#/components/schemas/AuthSuccess'
         '401':
           description: Invalid email or password.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      operationId: resetPassword
+      summary: Reset a forgotten password with a recovery code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetRequest'
+      responses:
+        '200':
+          description: Password reset successfully. A fresh recovery code is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordResetSuccess'
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Email or recovery code is incorrect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/recovery-code:
+    post:
+      tags: [Auth]
+      operationId: regenerateRecoveryCode
+      summary: Generate a new recovery code for the current user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: A fresh recovery code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryCodeSuccess'
+        '401':
+          description: Not authenticated.
           content:
             application/json:
               schema:
@@ -310,6 +361,45 @@ components:
         user:
           $ref: '#/components/schemas/AuthUser'
         token:
+          type: string
+    SignupSuccess:
+      type: object
+      required: [user, token, recoveryCode]
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUser'
+        token:
+          type: string
+        recoveryCode:
+          type: string
+          description: One-time backup code shown to the user. Used to reset a forgotten password.
+    PasswordResetRequest:
+      type: object
+      required: [email, recoveryCode, newPassword]
+      properties:
+        email:
+          type: string
+          format: email
+        recoveryCode:
+          type: string
+          minLength: 1
+        newPassword:
+          type: string
+          minLength: 6
+    PasswordResetSuccess:
+      type: object
+      required: [success, recoveryCode]
+      properties:
+        success:
+          type: boolean
+          const: true
+        recoveryCode:
+          type: string
+    RecoveryCodeSuccess:
+      type: object
+      required: [recoveryCode]
+      properties:
+        recoveryCode:
           type: string
     LogoutSuccess:
       type: object

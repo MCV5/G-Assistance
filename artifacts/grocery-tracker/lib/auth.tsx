@@ -12,6 +12,8 @@ import {
   getCurrentAuthUser,
   login as apiLogin,
   logout as apiLogout,
+  regenerateRecoveryCode as apiRegenerateRecoveryCode,
+  resetPassword as apiResetPassword,
   signup as apiSignup,
   type AuthUser,
 } from "@workspace/api-client-react";
@@ -22,6 +24,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  pendingRecoveryCode: string | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (
     email: string,
@@ -29,15 +32,26 @@ interface AuthContextValue {
     firstName?: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
+  acknowledgeRecoveryCode: () => void;
+  resetPassword: (
+    email: string,
+    recoveryCode: string,
+    newPassword: string,
+  ) => Promise<string>;
+  regenerateRecoveryCode: () => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   isLoading: true,
   isAuthenticated: false,
+  pendingRecoveryCode: null,
   login: async () => {},
   signup: async () => {},
   logout: async () => {},
+  acknowledgeRecoveryCode: () => {},
+  resetPassword: async () => "",
+  regenerateRecoveryCode: async () => "",
 });
 
 async function readToken(): Promise<string | null> {
@@ -63,6 +77,9 @@ async function clearToken(): Promise<void> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingRecoveryCode, setPendingRecoveryCode] = useState<string | null>(
+    null,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -117,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         firstName: firstName?.trim() || undefined,
       });
+      setPendingRecoveryCode(result.recoveryCode);
       await handleAuthSuccess(result.token, result.user);
     },
     [handleAuthSuccess],
@@ -128,6 +146,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
     await clearToken();
     setUser(null);
+    setPendingRecoveryCode(null);
+  }, []);
+
+  const acknowledgeRecoveryCode = useCallback(() => {
+    setPendingRecoveryCode(null);
+  }, []);
+
+  const resetPassword = useCallback<AuthContextValue["resetPassword"]>(
+    async (email, recoveryCode, newPassword) => {
+      const result = await apiResetPassword({
+        email,
+        recoveryCode,
+        newPassword,
+      });
+      return result.recoveryCode;
+    },
+    [],
+  );
+
+  const regenerateRecoveryCode = useCallback(async () => {
+    const result = await apiRegenerateRecoveryCode();
+    return result.recoveryCode;
   }, []);
 
   return (
@@ -136,9 +176,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        pendingRecoveryCode,
         login,
         signup,
         logout,
+        acknowledgeRecoveryCode,
+        resetPassword,
+        regenerateRecoveryCode,
       }}
     >
       {children}

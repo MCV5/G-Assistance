@@ -17,6 +17,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { RecoveryCodeScreen } from "@/components/RecoveryCodeScreen";
 import { PantryProvider } from "@/contexts/PantryContext";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
@@ -41,6 +42,7 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
       <Stack.Screen
         name="scan-review"
         options={{
@@ -61,19 +63,25 @@ function RootLayoutNav() {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const {
+    isAuthenticated,
+    isLoading,
+    pendingRecoveryCode,
+    acknowledgeRecoveryCode,
+  } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
     if (isLoading) return;
-    const onLogin = segments[0] === "login";
-    if (!isAuthenticated && !onLogin) {
+    const first = segments[0];
+    const onAuthRoute = first === "login" || first === "forgot-password";
+    if (!isAuthenticated && !onAuthRoute) {
       router.replace("/login");
-    } else if (isAuthenticated && onLogin) {
+    } else if (isAuthenticated && onAuthRoute && !pendingRecoveryCode) {
       router.replace("/");
     }
-  }, [isAuthenticated, isLoading, segments, router]);
+  }, [isAuthenticated, isLoading, segments, router, pendingRecoveryCode]);
 
   if (isLoading) {
     return (
@@ -87,6 +95,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       >
         <ActivityIndicator color="#6B7B5A" />
       </View>
+    );
+  }
+
+  if (isAuthenticated && pendingRecoveryCode) {
+    return (
+      <RecoveryCodeScreen
+        code={pendingRecoveryCode}
+        onAcknowledge={acknowledgeRecoveryCode}
+      />
     );
   }
 

@@ -10,9 +10,9 @@ This is a pnpm monorepo with the following workspace structure:
 
 - **`artifacts/grocery-tracker`** — The Expo mobile app (also runs on web).
   - 5 tabs: Home, Pantry, Scan, Shop, Insights.
-  - Auth-gated: unauthenticated users see `app/login.tsx`; auth state managed by `lib/auth.tsx` (Replit OIDC via `expo-auth-session` + `expo-secure-store`).
+  - Auth-gated: unauthenticated users see `app/login.tsx` (login + signup tabs with a "How it works" preview); auth state managed by `lib/auth.tsx`.
+  - Auth is **email + password** (bcrypt-hashed). Successful signup/login returns a session token stored in `expo-secure-store`. The generated API client attaches it as `Bearer` via `setAuthTokenGetter` (configured in `app/_layout.tsx`).
   - Persistence is **server-synced** through `lib/storage.ts` (calls `GET/PUT /api/me/store`). `PantryContext` loads on login, debounce-saves on every mutation, and clears on logout.
-  - Auth token: `setAuthTokenGetter` reads `auth_session_token` from `SecureStore` so the generated API client attaches Bearer auth.
   - Profile + log out UI lives in the Insights tab (`components/ProfileCard.tsx`).
   - Image capture via `expo-image-picker`; barcode via `expo-camera` + Open Food Facts.
   - Theme: sage green on cream; Inter font family.
@@ -20,7 +20,7 @@ This is a pnpm monorepo with the following workspace structure:
 - **`artifacts/api-server`** — Express API.
   - Wired with `cors({credentials:true})`, `cookieParser`, `authMiddleware` (sessions + Bearer token), JSON body limit 20 MB.
   - `POST /api/analyze-receipt` — Gemini `gemini-2.5-flash` vision → `ExtractedItem[]`.
-  - `routes/auth.ts` — Replit Auth OIDC routes (`/api/login`, `/api/callback`, `/api/logout`, `/api/auth/user`, `/api/mobile-auth/token-exchange`, etc.).
+  - `routes/auth.ts` — `POST /api/auth/signup`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/user`. Uses `bcryptjs` for password hashing and stores sessions in the `sessions` table (opaque `sid` tokens served as Bearer or `sid` cookie).
   - `routes/me.ts` — `GET/PUT /api/me/store` returns/persists `{ pantry, scans, shoppingList }` for the current user (gated by `req.isAuthenticated()`).
 
 - **`lib/api-spec`** — OpenAPI source of truth (`openapi.yaml`).
@@ -62,4 +62,5 @@ This is a pnpm monorepo with the following workspace structure:
 - Added `/analyze-receipt` endpoint backed by Gemini 2.5 Flash vision.
 - Established sage/cream theme and Inter typography.
 - Added Insights tab (top items, cadence, predicted restocks, category breakdown).
-- Added Replit Auth + Postgres-backed cloud sync: login screen, auth-gated app, `GET/PUT /api/me/store`, and profile/log-out card in Insights. Local `AsyncStorage` was replaced by API-backed persistence.
+- Added Postgres-backed cloud sync: `GET/PUT /api/me/store` and a profile/log-out card in Insights. Local `AsyncStorage` was replaced by API-backed persistence.
+- Added email + password authentication (signup / login / logout) with bcrypt + opaque session tokens. The login screen shows tabs for log in vs sign up plus a 4-step "How it works" preview.

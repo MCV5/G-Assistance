@@ -5,4 +5,8 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type UserStoreShoppingListItem = { [key: string]: unknown };
+export interface LoginRequest {
+  email: string;
+  /** @minLength 1 */
+  password: string;
+}

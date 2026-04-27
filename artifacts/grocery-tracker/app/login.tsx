@@ -185,7 +185,7 @@ export default function LoginScreen() {
           />
           <Text style={[styles.formHelper, { color: colors.mutedForeground }]}>
             {mode === "signup"
-              ? "You'll receive a one-time recovery code after sign up. Save it somewhere safe."
+              ? "Use a strong password so your account stays secure."
               : "Use the same account you use to manage your pantry and shopping insights."}
           </Text>
 

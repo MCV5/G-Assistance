@@ -17,6 +17,10 @@ export const usersTable = pgTable("users", {
   email: varchar("email").unique(),
   passwordHash: varchar("password_hash"),
   recoveryCodeHash: varchar("recovery_code_hash"),
+  passwordResetTokenHash: varchar("password_reset_token_hash"),
+  passwordResetTokenExpiresAt: timestamp("password_reset_token_expires_at", {
+    withTimezone: true,
+  }),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),

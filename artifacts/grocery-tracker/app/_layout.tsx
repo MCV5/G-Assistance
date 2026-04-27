@@ -17,7 +17,6 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { RecoveryCodeScreen } from "@/components/RecoveryCodeScreen";
 import { PantryProvider } from "@/contexts/PantryContext";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
@@ -63,12 +62,7 @@ function RootLayoutNav() {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const {
-    isAuthenticated,
-    isLoading,
-    pendingRecoveryCode,
-    acknowledgeRecoveryCode,
-  } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
@@ -78,10 +72,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const onAuthRoute = first === "login" || first === "forgot-password";
     if (!isAuthenticated && !onAuthRoute) {
       router.replace("/login");
-    } else if (isAuthenticated && onAuthRoute && !pendingRecoveryCode) {
+    } else if (isAuthenticated && onAuthRoute) {
       router.replace("/");
     }
-  }, [isAuthenticated, isLoading, segments, router, pendingRecoveryCode]);
+  }, [isAuthenticated, isLoading, segments, router]);
 
   if (isLoading) {
     return (
@@ -95,15 +89,6 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       >
         <ActivityIndicator color="#6B7B5A" />
       </View>
-    );
-  }
-
-  if (isAuthenticated && pendingRecoveryCode) {
-    return (
-      <RecoveryCodeScreen
-        code={pendingRecoveryCode}
-        onAcknowledge={acknowledgeRecoveryCode}
-      />
     );
   }
 

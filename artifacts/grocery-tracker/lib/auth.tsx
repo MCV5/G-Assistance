@@ -13,12 +13,30 @@ import {
   login as apiLogin,
   logout as apiLogout,
   regenerateRecoveryCode as apiRegenerateRecoveryCode,
-  resetPassword as apiResetPassword,
   signup as apiSignup,
   type AuthUser,
 } from "@workspace/api-client-react";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
+const API_BASE_URL = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : "";
+
+async function postPublicAuthJson<T>(
+  path: string,
+  body: Record<string, unknown>,
+): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await response.json()) as T & { error?: string };
+  if (!response.ok) {
+    throw new Error(data?.error || "Request failed.");
+  }
+  return data;
+}
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -33,11 +51,8 @@ interface AuthContextValue {
   ) => Promise<void>;
   logout: () => Promise<void>;
   acknowledgeRecoveryCode: () => void;
-  resetPassword: (
-    email: string,
-    recoveryCode: string,
-    newPassword: string,
-  ) => Promise<string>;
+  requestPasswordReset: (email: string) => Promise<{ resetLink?: string }>;
+  resetPassword: (email: string, token: string, newPassword: string) => Promise<void>;
   regenerateRecoveryCode: () => Promise<string>;
 }
 
@@ -50,7 +65,8 @@ const AuthContext = createContext<AuthContextValue>({
   signup: async () => {},
   logout: async () => {},
   acknowledgeRecoveryCode: () => {},
-  resetPassword: async () => "",
+  requestPasswordReset: async () => ({}),
+  resetPassword: async () => {},
   regenerateRecoveryCode: async () => "",
 });
 
@@ -153,14 +169,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingRecoveryCode(null);
   }, []);
 
+  const requestPasswordReset = useCallback<AuthContextValue["requestPasswordReset"]>(
+    async (email) => {
+      return postPublicAuthJson<{ success: boolean; resetLink?: string }>(
+        "/api/auth/forgot-password",
+        { email },
+      );
+    },
+    [],
+  );
+
   const resetPassword = useCallback<AuthContextValue["resetPassword"]>(
-    async (email, recoveryCode, newPassword) => {
-      const result = await apiResetPassword({
+    async (email, token, newPassword) => {
+      await postPublicAuthJson<{ success: boolean }>("/api/auth/reset-password", {
         email,
-        recoveryCode,
+        token,
         newPassword,
       });
-      return result.recoveryCode;
     },
     [],
   );
@@ -181,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         acknowledgeRecoveryCode,
+        requestPasswordReset,
         resetPassword,
         regenerateRecoveryCode,
       }}

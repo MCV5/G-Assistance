@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -14,7 +14,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { RecoveryCodeScreen } from "@/components/RecoveryCodeScreen";
 import { useColors } from "@/hooks/useColors";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
@@ -23,23 +22,44 @@ export default function ForgotPasswordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { resetPassword } = useAuth();
+  const { requestPasswordReset, resetPassword } = useAuth();
+  const params = useLocalSearchParams<{ email?: string; token?: string }>();
 
-  const [email, setEmail] = useState("");
-  const [recoveryCode, setRecoveryCode] = useState("");
+  const prefilledEmail = typeof params.email === "string" ? params.email : "";
+  const resetToken = typeof params.token === "string" ? params.token : "";
+
+  const [email, setEmail] = useState(prefilledEmail);
   const [newPassword, setNewPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [requested, setRequested] = useState(false);
+  const [debugResetLink, setDebugResetLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [freshCode, setFreshCode] = useState<string | null>(null);
+  const hasToken = resetToken.length > 0;
 
-  const submit = async () => {
+  const requestLink = async () => {
     setError(null);
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError("Please enter a valid email.");
       return;
     }
-    if (recoveryCode.replace(/[^A-Za-z0-9]/g, "").length < 8) {
-      setError("Please enter your full recovery code.");
+    try {
+      setSubmitting(true);
+      const response = await requestPasswordReset(email.trim().toLowerCase());
+      setRequested(true);
+      setDebugResetLink(response.resetLink ?? null);
+    } catch (err: unknown) {
+      setError(
+        "Couldn't send the reset link right now. Please check your connection and try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitReset = async () => {
+    setError(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email.");
       return;
     }
     if (newPassword.length < 6) {
@@ -48,30 +68,14 @@ export default function ForgotPasswordScreen() {
     }
     try {
       setSubmitting(true);
-      const next = await resetPassword(
-        email.trim().toLowerCase(),
-        recoveryCode,
-        newPassword,
-      );
-      setFreshCode(next);
+      await resetPassword(email.trim().toLowerCase(), resetToken, newPassword);
+      router.replace("/login");
     } catch (err: unknown) {
       setError(getAuthErrorMessage(err, "resetPassword"));
     } finally {
       setSubmitting(false);
     }
   };
-
-  if (freshCode) {
-    return (
-      <RecoveryCodeScreen
-        code={freshCode}
-        title="Password updated"
-        description="Your password is set. Here's your new recovery code — the old one no longer works. Save this somewhere safe."
-        primaryLabel="Back to log in"
-        onAcknowledge={() => router.replace("/login")}
-      />
-    );
-  }
 
   return (
     <KeyboardAvoidingView
@@ -110,7 +114,9 @@ export default function ForgotPasswordScreen() {
             Reset your password
           </Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Enter your email, your saved recovery code, and a new password.
+            {hasToken
+              ? "Enter your email and choose a new password."
+              : "Enter your email and we'll send you a reset link."}
           </Text>
         </View>
 
@@ -129,24 +135,27 @@ export default function ForgotPasswordScreen() {
             keyboardType="email-address"
             placeholder="you@example.com"
           />
-          <Field
-            label="Recovery code"
-            value={recoveryCode}
-            onChangeText={setRecoveryCode}
-            autoCapitalize="characters"
-            placeholder="XXXX-XXXX-XXXX-XXXX"
-          />
-          <Text style={[styles.fieldHint, { color: colors.mutedForeground }]}>
-            You can paste the code with or without dashes.
-          </Text>
-          <Field
-            label="New password"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            secureTextEntry
-            autoCapitalize="none"
-            placeholder="At least 6 characters"
-          />
+          {hasToken ? (
+            <Field
+              label="New password"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              secureTextEntry
+              autoCapitalize="none"
+              placeholder="At least 6 characters"
+            />
+          ) : null}
+
+          {requested ? (
+            <Text style={[styles.success, { color: colors.primary }]}>
+              If an account exists for this email, a reset link has been sent.
+            </Text>
+          ) : null}
+          {debugResetLink ? (
+            <Text style={[styles.fieldHint, { color: colors.mutedForeground }]}>
+              Dev reset link: {debugResetLink}
+            </Text>
+          ) : null}
 
           {error ? (
             <Text style={[styles.error, { color: colors.destructive }]}>
@@ -155,7 +164,7 @@ export default function ForgotPasswordScreen() {
           ) : null}
 
           <Pressable
-            onPress={submit}
+            onPress={hasToken ? submitReset : requestLink}
             disabled={submitting}
             style={({ pressed }) => [
               styles.primaryButton,
@@ -174,14 +183,16 @@ export default function ForgotPasswordScreen() {
                   { color: colors.primaryForeground },
                 ]}
               >
-                Reset password
+                {hasToken ? "Reset password" : "Send reset link"}
               </Text>
             )}
           </Pressable>
         </View>
 
         <Text style={[styles.helper, { color: colors.mutedForeground }]}>
-          Lost your recovery code? You'll need to create a new account.
+          {hasToken
+            ? "This link expires after a short time. Request another link if needed."
+            : "Check your spam folder if you don't see the email in a minute."}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -267,6 +278,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   error: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    marginTop: 12,
+  },
+  success: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
     marginTop: 12,

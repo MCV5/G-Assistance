@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
 
 type Mode = "login" | "signup";
@@ -90,12 +91,7 @@ export default function LoginScreen() {
         await login(email.trim().toLowerCase(), password);
       }
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ??
-        (err instanceof Error ? err.message : null) ??
-        "Something went wrong. Please try again.";
-      setError(String(message));
+      setError(getAuthErrorMessage(err, mode === "signup" ? "signup" : "login"));
     } finally {
       setSubmitting(false);
     }
@@ -132,8 +128,8 @@ export default function LoginScreen() {
             Grocery Tracker
           </Text>
           <Text style={[styles.tagline, { color: colors.mutedForeground }]}>
-            Snap your groceries. We'll learn your rhythm and remind you what to
-            restock.
+            Keep pantry tracking in sync across devices and get smart restock
+            reminders.
           </Text>
         </View>
 
@@ -187,6 +183,11 @@ export default function LoginScreen() {
             secureTextEntry
             placeholder={mode === "signup" ? "At least 6 characters" : "••••••••"}
           />
+          <Text style={[styles.formHelper, { color: colors.mutedForeground }]}>
+            {mode === "signup"
+              ? "You'll receive a one-time recovery code after sign up. Save it somewhere safe."
+              : "Use the same account you use to manage your pantry and shopping insights."}
+          </Text>
 
           {error ? (
             <Text style={[styles.error, { color: colors.destructive }]}>
@@ -427,6 +428,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 13,
     marginTop: 12,
+  },
+  formHelper: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 10,
   },
   primaryButton: {
     marginTop: 18,

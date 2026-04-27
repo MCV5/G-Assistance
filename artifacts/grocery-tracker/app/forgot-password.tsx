@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { RecoveryCodeScreen } from "@/components/RecoveryCodeScreen";
 import { useColors } from "@/hooks/useColors";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
 
 export default function ForgotPasswordScreen() {
@@ -54,12 +55,7 @@ export default function ForgotPasswordScreen() {
       );
       setFreshCode(next);
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ??
-        (err instanceof Error ? err.message : null) ??
-        "Couldn't reset your password. Please try again.";
-      setError(String(message));
+      setError(getAuthErrorMessage(err, "resetPassword"));
     } finally {
       setSubmitting(false);
     }
@@ -114,8 +110,7 @@ export default function ForgotPasswordScreen() {
             Reset your password
           </Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-            Enter your email, the recovery code we showed you at signup, and
-            your new password.
+            Enter your email, your saved recovery code, and a new password.
           </Text>
         </View>
 
@@ -141,6 +136,9 @@ export default function ForgotPasswordScreen() {
             autoCapitalize="characters"
             placeholder="XXXX-XXXX-XXXX-XXXX"
           />
+          <Text style={[styles.fieldHint, { color: colors.mutedForeground }]}>
+            You can paste the code with or without dashes.
+          </Text>
           <Field
             label="New password"
             value={newPassword}
@@ -272,6 +270,12 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 13,
     marginTop: 12,
+  },
+  fieldHint: {
+    marginTop: 8,
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    lineHeight: 17,
   },
   primaryButton: {
     marginTop: 18,

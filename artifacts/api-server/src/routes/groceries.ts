@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { ai } from "@workspace/integrations-gemini-ai";
 import { AnalyzeReceiptBody, AnalyzeReceiptResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -70,6 +69,7 @@ router.post("/analyze-receipt", async (req, res) => {
   const { imageBase64, mimeType, sourceType } = parseResult.data;
 
   try {
+    const { ai } = await import("@workspace/integrations-gemini-ai");
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: [
@@ -116,6 +116,17 @@ router.post("/analyze-receipt", async (req, res) => {
 
     res.json(validation.data);
   } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (
+      message.includes("AI_INTEGRATIONS_GEMINI_BASE_URL") ||
+      message.includes("AI_INTEGRATIONS_GEMINI_API_KEY")
+    ) {
+      res.status(503).json({
+        error:
+          "Receipt AI is not configured yet. Set Gemini integration environment variables to enable this feature.",
+      });
+      return;
+    }
     req.log.error({ err }, "Failed to analyze receipt");
     res.status(500).json({ error: "Failed to analyze image" });
   }

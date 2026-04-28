@@ -115,29 +115,21 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[s.body, { width: maxW }]}>
-          {/* Eyebrow */}
-          <Text style={s.eyebrow}>GROCERY TRACKER</Text>
-
-          {/* Hero headline */}
-          <Text style={s.headline}>
-            {"TRACK\n"}
-            <Text style={s.headlineAccent}>SMARTER.</Text>
-          </Text>
-
-          <View style={s.divider} />
-
-          {/* How it works — compact step boxes */}
-          <View style={s.stepsRow}>
-            {([
-              ["01", "SNAP"],
-              ["02", "SORT"],
-              ["03", "RESTOCK"],
-            ] as const).map(([num, word]) => (
-              <View key={num} style={s.stepBox}>
-                <Text style={s.stepNum}>{num}</Text>
-                <Text style={s.stepWord}>{word}</Text>
-              </View>
-            ))}
+          {/* Brand header */}
+          <View style={s.header}>
+            <View style={s.headerText}>
+              <Text style={s.eyebrow}>GROCERY TRACKER</Text>
+              <Text style={s.headline}>
+                {"TRACK "}
+                <Text style={s.headlineAccent}>SMARTER.</Text>
+              </Text>
+            </View>
+            <Pressable
+              style={s.introBtn}
+              onPress={() => router.push("/onboarding")}
+            >
+              <Text style={s.introBtnTxt}>How it works →</Text>
+            </Pressable>
           </View>
 
           <View style={s.divider} />
@@ -280,38 +272,29 @@ const s = StyleSheet.create({
     color: D.greenMid,
   },
 
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  headerText: {
+    flex: 1,
+  },
+  introBtn: {
+    paddingBottom: 4,
+    paddingLeft: 8,
+  },
+  introBtnTxt: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.greenMid,
+  },
+
   divider: {
     height: 1,
     backgroundColor: D.creamBorder,
     marginVertical: 18,
-  },
-
-  stepsRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  stepBox: {
-    flex: 1,
-    backgroundColor: D.creamDark,
-    borderWidth: 1,
-    borderColor: D.creamBorder,
-    borderRadius: 6,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  stepNum: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 20,
-    color: D.greenMid,
-    lineHeight: 22,
-  },
-  stepWord: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 8,
-    color: D.inkMid,
-    letterSpacing: 1,
-    marginTop: 2,
-    textTransform: "uppercase",
   },
 
   tabs: {

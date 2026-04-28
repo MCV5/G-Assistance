@@ -301,18 +301,45 @@ export default function HomeScreen() {
           {/* ── Empty state ── */}
           {pantry.length === 0 && (
             <View style={s.emptyWrap}>
-              <View style={s.emptyIcon}>
-                <Feather name="camera" size={28} color={D.greenMid} />
+              {/* Preview of what the app looks like with data */}
+              <View style={s.emptyPreview}>
+                <View style={s.emptyPreviewHead}>
+                  <Text style={s.emptyPreviewLabel}>YOUR PANTRY WILL LOOK LIKE</Text>
+                </View>
+                {[
+                  { name: "Olive Oil",     cat: "Condiments", qty: "x2", warn: false },
+                  { name: "Basmati Rice",  cat: "Grains",     qty: "x1", warn: false },
+                  { name: "Whole Milk",    cat: "Dairy",      qty: "x3", warn: true  },
+                ].map((item, i, arr) => (
+                  <View key={item.name} style={[
+                    s.emptyPreviewRow,
+                    i < arr.length - 1 && { borderBottomWidth: 1, borderBottomColor: D.creamBorder },
+                  ]}>
+                    <View style={[s.emptyPreviewDot, item.warn && { backgroundColor: D.amber }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.emptyPreviewName}>{item.name}</Text>
+                      <Text style={s.emptyPreviewCat}>{item.cat.toUpperCase()}</Text>
+                    </View>
+                    <Text style={s.emptyPreviewQty}>{item.qty}</Text>
+                  </View>
+                ))}
               </View>
-              <Text style={s.emptyTitle}>Pantry is empty</Text>
+
+              <Text style={s.emptyTitle}>Scan to fill your pantry</Text>
               <Text style={s.emptySub}>
-                Scan a receipt or grocery bag to start tracking your pantry.
+                Take a photo of any receipt, grocery bag, or cart. Every item is logged in seconds.
               </Text>
               <Pressable
                 style={({ pressed }) => [s.emptyBtn, { opacity: pressed ? 0.8 : 1 }]}
                 onPress={() => router.push("/(tabs)/scan")}
               >
-                <Text style={s.emptyBtnTxt}>→ SCAN NOW</Text>
+                <Feather name="camera" size={16} color={D.cream} style={{ marginRight: 8 }} />
+                <Text style={s.emptyBtnTxt}>SCAN YOUR FIRST RECEIPT</Text>
+              </Pressable>
+
+              <Text style={s.emptyOr}>or add items manually in</Text>
+              <Pressable onPress={() => router.push("/(tabs)/pantry")}>
+                <Text style={s.emptyLink}>Pantry →</Text>
               </Pressable>
             </View>
           )}
@@ -679,26 +706,68 @@ const s = StyleSheet.create({
 
   // Empty state
   emptyWrap: {
-    marginTop: 40,
+    marginTop: 24,
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
   },
-  emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  emptyPreview: {
+    width: "100%",
     backgroundColor: D.creamDark,
     borderWidth: 1,
     borderColor: D.creamBorder,
+    borderRadius: 12,
+    overflow: "hidden",
+    marginBottom: 24,
+    opacity: 0.7,
+  },
+  emptyPreviewHead: {
+    backgroundColor: D.greenMid,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  emptyPreviewLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 8,
+    letterSpacing: 1.2,
+    color: "rgba(168,201,127,0.8)",
+    textTransform: "uppercase",
+  },
+  emptyPreviewRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  emptyPreviewDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: D.greenLight,
+  },
+  emptyPreviewName: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: D.inkBlack,
+  },
+  emptyPreviewCat: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 9,
+    color: D.inkLight,
+    letterSpacing: 0.5,
+    marginTop: 1,
+  },
+  emptyPreviewQty: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    color: D.greenMid,
   },
   emptyTitle: {
     fontFamily: "Inter_700Bold",
-    fontSize: 18,
+    fontSize: 20,
     color: D.inkBlack,
     marginBottom: 8,
+    textAlign: "center",
   },
   emptySub: {
     fontFamily: "Inter_400Regular",
@@ -706,18 +775,33 @@ const s = StyleSheet.create({
     color: D.inkMid,
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: 24,
+    marginBottom: 20,
+    maxWidth: 300,
   },
   emptyBtn: {
     backgroundColor: D.greenMid,
     borderRadius: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
   },
   emptyBtnTxt: {
     fontFamily: "Inter_700Bold",
-    fontSize: 12,
+    fontSize: 11,
     color: D.cream,
     letterSpacing: 1.2,
+  },
+  emptyOr: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.inkLight,
+    marginBottom: 4,
+  },
+  emptyLink: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: D.greenMid,
   },
 });

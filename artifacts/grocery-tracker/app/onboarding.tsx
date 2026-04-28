@@ -14,17 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const D = {
-  greenDark:   "#1C3A0A",
-  greenMid:    "#2D5016",
-  greenLight:  "#A8C97F",
-  cream:       "#F5F1E8",
-  creamDark:   "#EDEAE0",
-  creamBorder: "#C8C4BA",
-  inkBlack:    "#1A1A1A",
-  inkMid:      "#5A5750",
-  amber:       "#E8A040",
-};
+import { boldTheme as D } from "@/constants/colors";
 
 const SLIDES = [
   {
@@ -248,7 +238,11 @@ export default function OnboardingScreen() {
 
   const goNext = () => {
     if (index < SLIDES.length - 1) {
-      listRef.current?.scrollToIndex({ index: index + 1, animated: true });
+      const next = index + 1;
+      // Update index immediately — onMomentumScrollEnd is unreliable
+      // after programmatic scrolls on Android and inconsistent on iOS.
+      setIndex(next);
+      listRef.current?.scrollToIndex({ index: next, animated: true });
     } else {
       finish();
     }

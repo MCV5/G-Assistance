@@ -16,21 +16,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { boldTheme as D } from "@/constants/colors";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
-
-// Design tokens — bold typographic / dark-forest theme
-const D = {
-  greenDark:   "#1C3A0A",
-  greenMid:    "#2D5016",
-  greenLight:  "#A8C97F",
-  cream:       "#F5F1E8",
-  creamDark:   "#EDEAE0",
-  creamBorder: "#C8C4BA",
-  inkBlack:    "#1A1A1A",
-  inkMid:      "#5A5750",
-  inkLight:    "#9E9B96",
-};
 
 type Mode = "login" | "signup";
 

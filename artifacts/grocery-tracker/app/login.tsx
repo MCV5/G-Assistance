@@ -1,75 +1,69 @@
-import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useColors } from "@/hooks/useColors";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
 
+// Design tokens — bold typographic / dark-forest theme
+const D = {
+  greenDark:   "#1C3A0A",
+  greenMid:    "#2D5016",
+  greenLight:  "#A8C97F",
+  cream:       "#F5F1E8",
+  creamDark:   "#EDEAE0",
+  creamBorder: "#C8C4BA",
+  inkBlack:    "#1A1A1A",
+  inkMid:      "#5A5750",
+  inkLight:    "#9E9B96",
+};
+
 type Mode = "login" | "signup";
 
-interface Step {
-  icon: React.ComponentProps<typeof Feather>["name"];
-  title: string;
-  body: string;
-}
-
-const STEPS: Step[] = [
-  {
-    icon: "camera",
-    title: "Snap your groceries",
-    body: "Photograph a receipt, bag, or your full cart.",
-  },
-  {
-    icon: "zap",
-    title: "AI extracts every item",
-    body: "Names, categories, and quantities — automatically.",
-  },
-  {
-    icon: "package",
-    title: "Track your pantry",
-    body: "See what you have and what's running low at a glance.",
-  },
-  {
-    icon: "trending-up",
-    title: "Predict your restocks",
-    body: "We learn your rhythm and tell you when to buy again.",
-  },
-];
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+function isValidEmail(v: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 }
 
 export default function LoginScreen() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { width: screenW } = useWindowDimensions();
+  const maxW = Math.min(screenW, 430);
   const router = useRouter();
   const { login, signup } = useAuth();
 
-  const [mode, setMode] = useState<Mode>("login");
+  const [mode, setMode]           = useState<Mode>("login");
   const [firstName, setFirstName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail]         = useState("");
+  const [password, setPassword]   = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+
+  const tabAnim = useRef(new Animated.Value(0)).current;
 
   const switchMode = (next: Mode) => {
     if (submitting) return;
     setMode(next);
     setError(null);
+    Animated.spring(tabAnim, {
+      toValue: next === "login" ? 0 : 1,
+      useNativeDriver: false,
+      damping: 20,
+      stiffness: 160,
+    }).start();
   };
 
   const handleSubmit = async () => {
@@ -82,7 +76,6 @@ export default function LoginScreen() {
       setError("Password must be at least 6 characters.");
       return;
     }
-
     try {
       setSubmitting(true);
       if (mode === "signup") {
@@ -97,409 +90,330 @@ export default function LoginScreen() {
     }
   };
 
+  const tabLeft = tabAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0%", "50%"],
+  });
+
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={[s.flex, { backgroundColor: D.cream }]}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
+      <StatusBar barStyle="dark-content" backgroundColor={D.cream} />
+
+      {/* Top accent stripe */}
+      <View style={s.stripe} />
+
       <ScrollView
-        contentContainerStyle={{
-          paddingTop: insets.top + 24,
-          paddingBottom: insets.bottom + 32,
-          paddingHorizontal: 24,
-        }}
+        style={s.flex}
+        contentContainerStyle={[
+          s.scroll,
+          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 36, alignItems: "center" },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.brand}>
-          <View
-            style={[
-              styles.iconBubble,
-              { backgroundColor: colors.primary },
-            ]}
-          >
-            <Feather
-              name="shopping-bag"
-              size={26}
-              color={colors.primaryForeground}
-            />
-          </View>
-          <Text style={[styles.appName, { color: colors.foreground }]}>
-            Grocery Tracker
-          </Text>
-          <Text style={[styles.tagline, { color: colors.mutedForeground }]}>
-            Keep pantry tracking in sync across devices and get smart restock
-            reminders.
-          </Text>
-        </View>
+        <View style={[s.body, { width: maxW }]}>
+          {/* Eyebrow */}
+          <Text style={s.eyebrow}>GROCERY TRACKER</Text>
 
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View
-            style={[
-              styles.tabRow,
-              { backgroundColor: `${colors.primary}14` },
-            ]}
-          >
-            <TabButton
-              label="Log in"
-              active={mode === "login"}
-              onPress={() => switchMode("login")}
-            />
-            <TabButton
-              label="Sign up"
-              active={mode === "signup"}
-              onPress={() => switchMode("signup")}
-            />
+          {/* Hero headline */}
+          <Text style={s.headline}>
+            {"TRACK\n"}
+            <Text style={s.headlineAccent}>SMARTER.</Text>
+          </Text>
+
+          <View style={s.divider} />
+
+          {/* How it works — compact step boxes */}
+          <View style={s.stepsRow}>
+            {([
+              ["01", "SNAP"],
+              ["02", "SORT"],
+              ["03", "RESTOCK"],
+            ] as const).map(([num, word]) => (
+              <View key={num} style={s.stepBox}>
+                <Text style={s.stepNum}>{num}</Text>
+                <Text style={s.stepWord}>{word}</Text>
+              </View>
+            ))}
           </View>
 
+          <View style={s.divider} />
+
+          {/* Animated tab switcher */}
+          <View style={s.tabs}>
+            <Animated.View style={[s.tabSlider, { left: tabLeft }]} />
+            <Pressable style={s.tabBtn} onPress={() => switchMode("login")}>
+              <Text style={[s.tabTxt, mode === "login" && s.tabTxtActive]}>
+                LOG IN
+              </Text>
+            </Pressable>
+            <Pressable style={s.tabBtn} onPress={() => switchMode("signup")}>
+              <Text style={[s.tabTxt, mode === "signup" && s.tabTxtActive]}>
+                SIGN UP
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Form */}
           {mode === "signup" && (
-            <Field
-              label="First name"
-              value={firstName}
-              onChangeText={setFirstName}
-              autoCapitalize="words"
-              placeholder="Alex"
-            />
+            <>
+              <Text style={s.label}>FIRST NAME</Text>
+              <TextInput
+                style={s.input}
+                placeholder="Alex"
+                placeholderTextColor={D.inkLight}
+                value={firstName}
+                onChangeText={setFirstName}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </>
           )}
-          <Field
-            label="Email"
+
+          <Text style={s.label}>EMAIL</Text>
+          <TextInput
+            style={s.input}
+            placeholder="you@example.com"
+            placeholderTextColor={D.inkLight}
             value={email}
             onChangeText={setEmail}
+            keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
-            keyboardType="email-address"
-            placeholder="you@example.com"
+            autoCorrect={false}
           />
-          <Field
-            label="Password"
+
+          <Text style={s.label}>PASSWORD</Text>
+          <TextInput
+            style={s.input}
+            placeholder="••••••••"
+            placeholderTextColor={D.inkLight}
             value={password}
             onChangeText={setPassword}
-            autoCapitalize="none"
             secureTextEntry
-            placeholder={mode === "signup" ? "At least 6 characters" : "••••••••"}
+            autoCapitalize="none"
           />
-          <Text style={[styles.formHelper, { color: colors.mutedForeground }]}>
-            {mode === "signup"
-              ? "Use a strong password so your account stays secure."
-              : "Use the same account you use to manage your pantry and shopping insights."}
-          </Text>
+
+          {mode === "signup" && (
+            <Text style={s.hint}>Min. 6 characters</Text>
+          )}
 
           {error ? (
-            <Text style={[styles.error, { color: colors.destructive }]}>
-              {error}
-            </Text>
+            <View style={s.errorBox}>
+              <Text style={s.errorTxt}>{error}</Text>
+            </View>
           ) : null}
 
           <Pressable
             onPress={handleSubmit}
             disabled={submitting}
             style={({ pressed }) => [
-              styles.primaryButton,
-              {
-                backgroundColor: colors.primary,
-                opacity: pressed || submitting ? 0.85 : 1,
-              },
+              s.submit,
+              { opacity: pressed || submitting ? 0.7 : 1 },
             ]}
           >
             {submitting ? (
-              <ActivityIndicator color={colors.primaryForeground} />
+              <ActivityIndicator color={D.cream} />
             ) : (
-              <Text
-                style={[
-                  styles.primaryLabel,
-                  { color: colors.primaryForeground },
-                ]}
-              >
-                {mode === "signup" ? "Create account" : "Log in"}
+              <Text style={s.submitTxt}>
+                {mode === "login" ? "→ ENTER" : "→ CREATE ACCOUNT"}
               </Text>
             )}
           </Pressable>
 
-          <Pressable
-            onPress={() =>
-              switchMode(mode === "signup" ? "login" : "signup")
-            }
-            style={styles.switchHint}
-          >
-            <Text
-              style={[styles.switchText, { color: colors.mutedForeground }]}
-            >
-              {mode === "signup"
-                ? "Already have an account? "
-                : "New here? "}
-              <Text style={{ color: colors.primary, fontFamily: "Inter_600SemiBold" }}>
-                {mode === "signup" ? "Log in" : "Create one"}
-              </Text>
-            </Text>
-          </Pressable>
-
-          {mode === "login" && (
+          {mode === "login" ? (
             <Pressable
+              style={s.forgotWrap}
               onPress={() => router.push("/forgot-password")}
-              style={styles.forgotHint}
-              hitSlop={6}
             >
-              <Text
-                style={[styles.forgotText, { color: colors.primary }]}
-              >
-                Forgot your password?
-              </Text>
+              <Text style={s.forgotTxt}>Forgot your password?</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              style={s.forgotWrap}
+              onPress={() => switchMode("login")}
+            >
+              <Text style={s.forgotTxt}>Already have an account? Log in</Text>
             </Pressable>
           )}
-        </View>
-
-        <View style={styles.previewSection}>
-          <Text
-            style={[styles.previewTitle, { color: colors.foreground }]}
-          >
-            How it works
-          </Text>
-          <View style={{ gap: 10 }}>
-            {STEPS.map((step, idx) => (
-              <View
-                key={step.title}
-                style={[
-                  styles.stepRow,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.stepIcon,
-                    { backgroundColor: `${colors.primary}1f` },
-                  ]}
-                >
-                  <Feather name={step.icon} size={18} color={colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text
-                    style={[styles.stepNum, { color: colors.mutedForeground }]}
-                  >
-                    STEP {idx + 1}
-                  </Text>
-                  <Text
-                    style={[styles.stepTitle, { color: colors.foreground }]}
-                  >
-                    {step.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.stepBody,
-                      { color: colors.mutedForeground },
-                    ]}
-                  >
-                    {step.body}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-function TabButton({
-  label,
-  active,
-  onPress,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  const colors = useColors();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        styles.tabButton,
-        active && { backgroundColor: colors.card },
-      ]}
-    >
-      <Text
-        style={[
-          styles.tabLabel,
-          {
-            color: active ? colors.foreground : colors.mutedForeground,
-            fontFamily: active ? "Inter_600SemiBold" : "Inter_500Medium",
-          },
-        ]}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
+const s = StyleSheet.create({
+  flex:  { flex: 1 },
+  scroll: { flexGrow: 1 },
 
-interface FieldProps extends React.ComponentProps<typeof TextInput> {
-  label: string;
-}
-
-function Field({ label, ...rest }: FieldProps) {
-  const colors = useColors();
-  return (
-    <View style={{ gap: 6, marginTop: 14 }}>
-      <Text style={[styles.fieldLabel, { color: colors.foreground }]}>
-        {label}
-      </Text>
-      <TextInput
-        {...rest}
-        placeholderTextColor={colors.mutedForeground}
-        style={[
-          styles.input,
-          {
-            backgroundColor: colors.background,
-            borderColor: colors.border,
-            color: colors.foreground,
-          },
-        ]}
-      />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  brand: {
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 24,
+  stripe: {
+    height: 5,
+    backgroundColor: D.greenMid,
   },
-  iconBubble: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
+
+  body: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
   },
-  appName: {
+
+  eyebrow: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 2.5,
+    color: D.greenMid,
+    marginBottom: 10,
+    textTransform: "uppercase",
+  },
+
+  headline: {
     fontFamily: "Inter_700Bold",
-    fontSize: 26,
+    fontSize: 44,
+    color: D.inkBlack,
+    lineHeight: 46,
+    textTransform: "uppercase",
     letterSpacing: -0.5,
   },
-  tagline: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: "center",
-    maxWidth: 320,
+  headlineAccent: {
+    color: D.greenMid,
   },
-  card: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 16,
+
+  divider: {
+    height: 1,
+    backgroundColor: D.creamBorder,
+    marginVertical: 18,
   },
-  tabRow: {
+
+  stepsRow: {
     flexDirection: "row",
-    padding: 4,
-    borderRadius: 12,
+    gap: 8,
   },
-  tabButton: {
+  stepBox: {
     flex: 1,
-    paddingVertical: 9,
-    borderRadius: 9,
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 6,
+    paddingVertical: 10,
     alignItems: "center",
   },
-  tabLabel: {
-    fontSize: 14,
+  stepNum: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 20,
+    color: D.greenMid,
+    lineHeight: 22,
   },
-  fieldLabel: {
+  stepWord: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
+    fontSize: 8,
+    color: D.inkMid,
+    letterSpacing: 1,
+    marginTop: 2,
+    textTransform: "uppercase",
+  },
+
+  tabs: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 6,
+    overflow: "hidden",
+    marginBottom: 20,
+    position: "relative",
+    height: 42,
+  },
+  tabSlider: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    width: "50%",
+    backgroundColor: D.greenMid,
+    borderRadius: 5,
+  },
+  tabBtn: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  tabTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: D.inkMid,
+  },
+  tabTxtActive: {
+    color: D.cream,
+  },
+
+  label: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.inkMid,
+    marginBottom: 6,
+    marginTop: 8,
+    textTransform: "uppercase",
   },
   input: {
+    backgroundColor: D.creamDark,
     borderWidth: 1,
-    borderRadius: 12,
+    borderColor: D.creamBorder,
+    borderRadius: 6,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontFamily: "Inter_400Regular",
-    fontSize: 15,
+    fontSize: 14,
+    color: D.inkBlack,
+    marginBottom: 2,
   },
-  error: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    marginTop: 12,
-  },
-  formHelper: {
+  hint: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginTop: 10,
+    fontSize: 11,
+    color: D.inkLight,
+    marginBottom: 10,
+    marginTop: 4,
   },
-  primaryButton: {
-    marginTop: 18,
-    paddingVertical: 14,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryLabel: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
-  },
-  switchHint: {
-    marginTop: 14,
-    alignItems: "center",
-  },
-  switchText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
-  },
-  forgotHint: {
+
+  errorBox: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    borderRadius: 6,
+    padding: 10,
     marginTop: 8,
-    alignItems: "center",
-  },
-  forgotText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 13,
-  },
-  previewSection: {
-    marginTop: 28,
-    gap: 12,
-  },
-  previewTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 18,
     marginBottom: 4,
   },
-  stepRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderRadius: 14,
+  errorTxt: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: "#B91C1C",
   },
-  stepIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+
+  submit: {
+    backgroundColor: D.greenMid,
+    borderRadius: 6,
+    paddingVertical: 14,
     alignItems: "center",
-    justifyContent: "center",
+    marginTop: 12,
   },
-  stepNum: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 10,
-    letterSpacing: 0.7,
+  submitTxt: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 12,
+    color: D.cream,
+    letterSpacing: 1.5,
   },
-  stepTitle: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
-    marginTop: 2,
+
+  forgotWrap: {
+    alignItems: "center",
+    marginTop: 16,
+    paddingVertical: 4,
   },
-  stepBody: {
+  forgotTxt: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12.5,
-    lineHeight: 18,
-    marginTop: 2,
+    fontSize: 12,
+    color: D.inkLight,
   },
 });

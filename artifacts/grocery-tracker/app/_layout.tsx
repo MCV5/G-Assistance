@@ -5,12 +5,13 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -40,6 +41,7 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="onboarding" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
       <Stack.Screen
@@ -65,29 +67,40 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
+    AsyncStorage.getItem("@grocery_onboarded")
+      .then((val) => setOnboarded(val === "true"))
+      .catch(() => setOnboarded(false));
+  }, []);
+
+  useEffect(() => {
+    if (isLoading || onboarded === null) return;
     const first = segments[0];
-    const onAuthRoute = first === "login" || first === "forgot-password";
-    if (!isAuthenticated && !onAuthRoute) {
-      router.replace("/login");
-    } else if (isAuthenticated && onAuthRoute) {
+    const onPublicRoute =
+      first === "login" ||
+      first === "forgot-password" ||
+      first === "onboarding";
+
+    if (!isAuthenticated && !onPublicRoute) {
+      router.replace(onboarded ? "/login" : "/onboarding");
+    } else if (isAuthenticated && onPublicRoute) {
       router.replace("/");
     }
-  }, [isAuthenticated, isLoading, segments, router]);
+  }, [isAuthenticated, isLoading, segments, router, onboarded]);
 
-  if (isLoading) {
+  if (isLoading || onboarded === null) {
     return (
       <View
         style={{
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#FAF7F2",
+          backgroundColor: "#F5F1E8",
         }}
       >
-        <ActivityIndicator color="#6B7B5A" />
+        <ActivityIndicator color="#2D5016" />
       </View>
     );
   }

@@ -1,14 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Easing,
   FlatList,
   Platform,
+  Pressable,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
   useWindowDimensions,
 } from "react-native";
@@ -16,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { boldTheme as D } from "@/constants/colors";
 
+// ─── Slide data ────────────────────────────────────────────────────────────────
 const SLIDES = [
   {
     id: "1",
@@ -46,7 +48,7 @@ const SLIDES = [
   },
 ] as const;
 
-// ─── Visual components inside the dark-green area ─────────────────────────────
+// ─── Visual panel components (inside dark-green area) ─────────────────────────
 
 function GridLines() {
   return (
@@ -77,9 +79,9 @@ function DataCard({
 }) {
   return (
     <View style={[vc.card, style]}>
-      <Text style={vc.label}>{label}</Text>
-      <Text style={vc.value}>{value}</Text>
-      {sub  ? <Text style={vc.sub}>{sub}</Text> : null}
+      <Text style={vc.cardLabel}>{label}</Text>
+      <Text style={vc.cardValue}>{value}</Text>
+      {sub  ? <Text style={vc.cardSub}>{sub}</Text>  : null}
       {chip ? (
         <View style={vc.chip}><Text style={vc.chipTxt}>{chip}</Text></View>
       ) : null}
@@ -87,7 +89,7 @@ function DataCard({
   );
 }
 
-function ScanVisual() {
+function ScanPanel() {
   return (
     <View style={{ flex: 1 }}>
       <GridLines />
@@ -101,7 +103,7 @@ function ScanVisual() {
   );
 }
 
-function PantryVisual({ width }: { width: number }) {
+function PantryPanel({ width }: { width: number }) {
   const items = [
     { name: "Olive oil", pct: 72, warn: false },
     { name: "Pasta",     pct: 30, warn: true  },
@@ -113,23 +115,14 @@ function PantryVisual({ width }: { width: number }) {
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
       <GridLines />
       <View style={[vc.card, { width: cardW, marginBottom: 10 }]}>
-        <Text style={vc.label}>PANTRY</Text>
+        <Text style={vc.cardLabel}>PANTRY</Text>
         {items.map((item) => (
           <View key={item.name} style={vc.pantryRow}>
-            <Text style={[vc.pantryName, item.warn && { color: D.amber }]}>
-              {item.name}
-            </Text>
+            <Text style={[vc.pantryName, item.warn && { color: D.amber }]}>{item.name}</Text>
             <View style={vc.barTrack}>
-              <View
-                style={[
-                  vc.barFill,
-                  { width: `${item.pct}%`, backgroundColor: item.warn ? D.amber : D.greenLight },
-                ]}
-              />
+              <View style={[vc.barFill, { width: `${item.pct}%`, backgroundColor: item.warn ? D.amber : D.greenLight }]} />
             </View>
-            <Text style={[vc.pantryPct, item.warn && { color: D.amber }]}>
-              {item.pct}%
-            </Text>
+            <Text style={[vc.pantryPct, item.warn && { color: D.amber }]}>{item.pct}%</Text>
           </View>
         ))}
       </View>
@@ -140,8 +133,8 @@ function PantryVisual({ width }: { width: number }) {
           { lbl: "LOW",   val: "2",  warn: true  },
         ].map((b) => (
           <View key={b.lbl} style={[vc.card, { flex: 1, padding: 8 }, b.warn && { borderColor: "rgba(232,160,64,0.4)" }]}>
-            <Text style={[vc.label, b.warn && { color: "rgba(232,160,64,0.6)" }]}>{b.lbl}</Text>
-            <Text style={[vc.value, { fontSize: 18 }, b.warn && { color: D.amber }]}>{b.val}</Text>
+            <Text style={[vc.cardLabel, b.warn && { color: "rgba(232,160,64,0.6)" }]}>{b.lbl}</Text>
+            <Text style={[vc.cardValue, { fontSize: 18 }, b.warn && { color: D.amber }]}>{b.val}</Text>
           </View>
         ))}
       </View>
@@ -149,15 +142,15 @@ function PantryVisual({ width }: { width: number }) {
   );
 }
 
-function RestockVisual() {
+function RestockPanel() {
   return (
     <View style={{ flex: 1 }}>
       <GridLines />
       <View style={[vc.card, { position: "absolute", top: 22, left: 18, right: 18 }]}>
-        <Text style={vc.label}>RESTOCK REMINDERS</Text>
+        <Text style={vc.cardLabel}>RESTOCK REMINDERS</Text>
         {[
-          { name: "Pasta",    days: "Today",    urgent: true  },
-          { name: "Oats",     days: "Tomorrow", urgent: true  },
+          { name: "Pasta",    days: "Today",     urgent: true  },
+          { name: "Oats",     days: "Tomorrow",  urgent: true  },
           { name: "Olive oil", days: "In 4 days", urgent: false },
         ].map((r) => (
           <View key={r.name} style={vc.restockRow}>
@@ -173,63 +166,48 @@ function RestockVisual() {
   );
 }
 
-// ─── Slide ────────────────────────────────────────────────────────────────────
-
-function Slide({
-  item,
-  width,
-  height,
-}: {
-  item: (typeof SLIDES)[number];
-  width: number;
-  height: number;
-}) {
-  return (
-    <View style={{ width, height, backgroundColor: D.cream }}>
-      {/* Top accent stripe */}
-      <View style={{ height: 5, backgroundColor: D.greenMid }} />
-
-      {/* Dark-green visual area */}
-      <View style={{ height: 220, backgroundColor: D.greenMid, overflow: "hidden" }}>
-        {item.visual === "scan"    ? <ScanVisual /> : null}
-        {item.visual === "pantry"  ? <PantryVisual width={width} /> : null}
-        {item.visual === "restock" ? <RestockVisual /> : null}
-      </View>
-
-      {/* Text content */}
-      <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 22 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <Text style={tx.stepNum}>{item.step}</Text>
-          <View style={tx.badge}>
-            <Text style={tx.badgeTxt}>{item.badge}</Text>
-          </View>
-        </View>
-        <Text style={tx.headline}>
-          {item.headline}
-          <Text style={tx.accent}>{item.accent}</Text>
-        </Text>
-        <Text style={tx.body}>{item.body}</Text>
-      </View>
-    </View>
-  );
-}
-
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-const NAV_H = Platform.OS === "ios" ? 72 : 64;
+const VISUAL_H = 230;
+const NAV_H    = Platform.OS === "ios" ? 72 : 64;
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width: screenW, height: screenH } = useWindowDimensions();
-
-  // Cap width for web/tablet
+  const { width: screenW } = useWindowDimensions();
   const W = Math.min(screenW, 430);
-  const slideH = screenH - NAV_H - insets.bottom - insets.top;
 
-  const listRef = useRef<FlatList>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const listRef  = useRef<FlatList>(null);
+  const scrollX  = useRef(new Animated.Value(0)).current;
   const [index, setIndex] = useState(0);
+
+  // ── Text content animation ──────────────────────────────────────────────────
+  const textOpacity  = useRef(new Animated.Value(1)).current;
+  const textY        = useRef(new Animated.Value(0)).current;
+
+  const animateIn = () => {
+    textOpacity.setValue(0);
+    textY.setValue(18);
+    Animated.parallel([
+      Animated.timing(textOpacity, {
+        toValue: 1,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(textY, {
+        toValue: 0,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // Animate on first mount
+  useEffect(() => { animateIn(); }, []);
+
+  const slide = SLIDES[index];
 
   const finish = async () => {
     try { await AsyncStorage.setItem("@grocery_onboarded", "true"); } catch {}
@@ -239,19 +217,33 @@ export default function OnboardingScreen() {
   const goNext = () => {
     if (index < SLIDES.length - 1) {
       const next = index + 1;
-      // Update index immediately — onMomentumScrollEnd is unreliable
-      // after programmatic scrolls on Android and inconsistent on iOS.
       setIndex(next);
       listRef.current?.scrollToIndex({ index: next, animated: true });
+      animateIn();
     } else {
       finish();
     }
   };
 
+  // Sync index from user swipes
+  const onMomentumEnd = (e: { nativeEvent: { contentOffset: { x: number } } }) => {
+    const newIndex = Math.round(e.nativeEvent.contentOffset.x / W);
+    if (newIndex !== index) {
+      setIndex(newIndex);
+      animateIn();
+    }
+  };
+
+  const isLast = index === SLIDES.length - 1;
+
   return (
     <View style={{ flex: 1, backgroundColor: D.cream, alignItems: "center" }}>
       <StatusBar barStyle="dark-content" backgroundColor={D.cream} />
 
+      {/* Top stripe */}
+      <View style={{ width: W, height: 5, backgroundColor: D.greenMid }} />
+
+      {/* Visual panels — only this part scrolls */}
       <FlatList
         ref={listRef}
         data={SLIDES}
@@ -259,37 +251,58 @@ export default function OnboardingScreen() {
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        style={{ flex: 1, width: W }}
+        scrollEnabled={true}
+        style={{ width: W, height: VISUAL_H, flexGrow: 0 }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
           { useNativeDriver: false },
         )}
-        onMomentumScrollEnd={(e) => {
-          setIndex(Math.round(e.nativeEvent.contentOffset.x / W));
-        }}
+        onMomentumScrollEnd={onMomentumEnd}
         scrollEventThrottle={16}
         renderItem={({ item }) => (
-          <Slide item={item} width={W} height={slideH} />
+          <View style={{ width: W, height: VISUAL_H, backgroundColor: D.greenMid, overflow: "hidden" }}>
+            {item.visual === "scan"    ? <ScanPanel /> : null}
+            {item.visual === "pantry"  ? <PantryPanel width={W} /> : null}
+            {item.visual === "restock" ? <RestockPanel /> : null}
+          </View>
         )}
       />
 
-      {/* Bottom nav */}
-      <View
+      {/* Animated text content — outside FlatList for smooth animations */}
+      <Animated.View
         style={[
-          nav.bar,
-          {
-            width: W,
-            paddingBottom: insets.bottom + 8,
-          },
+          tx.content,
+          { width: W, opacity: textOpacity, transform: [{ translateY: textY }] },
         ]}
       >
-        <TouchableOpacity
+        <View style={tx.stepRow}>
+          <Text style={tx.stepNum}>{slide.step}</Text>
+          <View style={tx.badge}>
+            <Text style={tx.badgeTxt}>{slide.badge}</Text>
+          </View>
+        </View>
+
+        <Text style={tx.headline}>
+          {slide.headline}
+          <Text style={tx.accent}>{slide.accent}</Text>
+        </Text>
+
+        <Text style={tx.body}>{slide.body}</Text>
+      </Animated.View>
+
+      {/* Spacer to push nav to bottom */}
+      <View style={{ flex: 1 }} />
+
+      {/* Bottom nav */}
+      <View style={[nav.bar, { width: W, paddingBottom: insets.bottom + 8 }]}>
+        <Pressable
           onPress={finish}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <Text style={nav.skip}>SKIP</Text>
-        </TouchableOpacity>
+        </Pressable>
 
+        {/* Dot indicators */}
         <View style={nav.dots}>
           {SLIDES.map((_, i) => {
             const range = [(i - 1) * W, i * W, (i + 1) * W];
@@ -316,9 +329,12 @@ export default function OnboardingScreen() {
           })}
         </View>
 
-        <TouchableOpacity style={nav.nextBtn} onPress={goNext} activeOpacity={0.8}>
-          <Text style={nav.nextTxt}>{index === SLIDES.length - 1 ? "START →" : "NEXT →"}</Text>
-        </TouchableOpacity>
+        <Pressable
+          style={({ pressed }) => [nav.nextBtn, { opacity: pressed ? 0.8 : 1 }]}
+          onPress={goNext}
+        >
+          <Text style={nav.nextTxt}>{isLast ? "START →" : "NEXT →"}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -335,7 +351,7 @@ const vc = StyleSheet.create({
     padding: 12,
     minWidth: 110,
   },
-  label: {
+  cardLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 8,
     letterSpacing: 1.2,
@@ -343,12 +359,12 @@ const vc = StyleSheet.create({
     marginBottom: 4,
     textTransform: "uppercase",
   },
-  value: {
+  cardValue: {
     fontFamily: "Inter_700Bold",
     fontSize: 16,
     color: D.greenLight,
   },
-  sub: {
+  cardSub: {
     fontFamily: "Inter_400Regular",
     fontSize: 8,
     color: "rgba(168,201,127,0.4)",
@@ -380,6 +396,16 @@ const vc = StyleSheet.create({
 });
 
 const tx = StyleSheet.create({
+  content: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
   stepNum: {
     fontFamily: "Inter_700Bold",
     fontSize: 42,
@@ -401,19 +427,19 @@ const tx = StyleSheet.create({
   },
   headline: {
     fontFamily: "Inter_700Bold",
-    fontSize: 28,
+    fontSize: 30,
     color: D.inkBlack,
-    lineHeight: 32,
+    lineHeight: 34,
     textTransform: "uppercase",
-    marginBottom: 10,
+    marginBottom: 12,
     letterSpacing: -0.3,
   },
   accent: { color: D.greenMid },
   body: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    fontSize: 14,
     color: D.inkMid,
-    lineHeight: 20,
+    lineHeight: 22,
   },
 });
 

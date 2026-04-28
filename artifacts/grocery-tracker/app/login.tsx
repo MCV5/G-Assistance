@@ -103,21 +103,23 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[s.body, { width: maxW }]}>
+          {/* Back to onboarding */}
+          <Pressable
+            style={s.backBtn}
+            onPress={() => router.push("/onboarding")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={s.backArrow}>←</Text>
+            <Text style={s.backTxt}>How it works</Text>
+          </Pressable>
+
           {/* Brand header */}
           <View style={s.header}>
-            <View style={s.headerText}>
-              <Text style={s.eyebrow}>GROCERY TRACKER</Text>
-              <Text style={s.headline}>
-                {"TRACK "}
-                <Text style={s.headlineAccent}>SMARTER.</Text>
-              </Text>
-            </View>
-            <Pressable
-              style={s.introBtn}
-              onPress={() => router.push("/onboarding")}
-            >
-              <Text style={s.introBtnTxt}>How it works →</Text>
-            </Pressable>
+            <Text style={s.eyebrow}>GROCERY TRACKER</Text>
+            <Text style={s.headline}>
+              {"TRACK "}
+              <Text style={s.headlineAccent}>SMARTER.</Text>
+            </Text>
           </View>
 
           <View style={s.divider} />
@@ -260,23 +262,33 @@ const s = StyleSheet.create({
     color: D.greenMid,
   },
 
-  header: {
+  backBtn: {
     flexDirection: "row",
-    alignItems: "flex-end",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 20,
+    alignSelf: "flex-start",
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  headerText: {
-    flex: 1,
-  },
-  introBtn: {
-    paddingBottom: 4,
-    paddingLeft: 8,
-  },
-  introBtnTxt: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
+  backArrow: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
     color: D.greenMid,
+    lineHeight: 18,
+  },
+  backTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    color: D.inkMid,
+    letterSpacing: 0.3,
+  },
+  header: {
+    marginBottom: 4,
   },
 
   divider: {

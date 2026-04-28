@@ -1,3 +1,9 @@
+import path from "path";
+import dotenv from "dotenv";
+
+// Load .env from repo root (two levels up from artifacts/api-server)
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
+
 import app from "./app";
 import { logger } from "./lib/logger";
 

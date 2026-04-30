@@ -292,6 +292,18 @@ components:
           type: string
         estimatedShelfLifeDays:
           type: integer
+        isOrganic:
+          type: boolean
+          description: True when item is explicitly marked organic on packaging/receipt text.
+        organicConfidence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Confidence score for organic inference (0..1).
+        organicSource:
+          type: string
+          enum: [label, name_keyword, manual]
+          description: Where organic inference came from.
       required: [name, category, quantity, unit, estimatedShelfLifeDays]
     ReceiptResult:
       type: object

@@ -18,9 +18,24 @@ import { EmptyState } from "@/components/EmptyState";
 import { ItemRow } from "@/components/ItemRow";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
+import { getCategoryTone } from "@/lib/categories";
+import { getDaysUntilNeeded } from "@/lib/predictions";
 import { CATEGORIES, type Category, type PantryItem } from "@/lib/types";
 
 type Filter = "all" | "need" | Category;
+type SortMode = "az" | "need" | "recent";
+type PantryListRow =
+  | { kind: "item"; item: PantryItem }
+  | {
+      kind: "group";
+      id: string;
+      label: string;
+      category: Category;
+      count: number;
+      dueInDays: number;
+      organicCount: number;
+      members: PantryItem[];
+    };
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
@@ -34,9 +49,11 @@ export default function PantryScreen() {
   const { pantry, markConsumed, unmarkConsumed, removeItem, addManualPantryItem } = usePantry();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("need");
   const [addOpen, setAddOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-  const filtered = useMemo<PantryItem[]>(() => {
+  const rows = useMemo<PantryListRow[]>(() => {
     let list = pantry.slice();
     if (filter === "need") {
       list = list.filter((p) => {
@@ -54,9 +71,55 @@ export default function PantryScreen() {
       const q = search.trim().toLowerCase();
       list = list.filter((p) => p.name.toLowerCase().includes(q));
     }
-    list.sort((a, b) => a.name.localeCompare(b.name));
-    return list;
-  }, [pantry, filter, search]);
+
+    switch (sortMode) {
+      case "recent":
+        list.sort(
+          (a, b) =>
+            new Date(b.lastPurchasedAt).getTime() - new Date(a.lastPurchasedAt).getTime(),
+        );
+        break;
+      case "az":
+        list.sort((a, b) => a.name.localeCompare(b.name));
+        break;
+      case "need":
+      default:
+        list.sort((a, b) => getDaysUntilNeeded(a) - getDaysUntilNeeded(b));
+        break;
+    }
+
+    const grouped = new Map<string, PantryListRow>();
+    const output: PantryListRow[] = [];
+    for (const item of list) {
+      const family = inferFamily(item.name);
+      if (!family) {
+        output.push({ kind: "item", item });
+        continue;
+      }
+      const key = `${item.category}:${family}`;
+      const existing = grouped.get(key);
+      if (!existing || existing.kind !== "group") {
+        const group: PantryListRow = {
+          kind: "group",
+          id: key,
+          label: family,
+          category: item.category,
+          count: 1,
+          dueInDays: getDaysUntilNeeded(item),
+          organicCount: item.isOrganic ? 1 : 0,
+          members: [item],
+        };
+        grouped.set(key, group);
+        output.push(group);
+      } else {
+        existing.count += 1;
+        existing.dueInDays = Math.min(existing.dueInDays, getDaysUntilNeeded(item));
+        existing.organicCount += item.isOrganic ? 1 : 0;
+        existing.members.push(item);
+      }
+    }
+    return output;
+  }, [pantry, filter, search, sortMode]);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 12;
@@ -140,43 +203,157 @@ export default function PantryScreen() {
             );
           })}
         </ScrollView>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 10, gap: 8 }}
+        >
+          {[
+            { key: "need", label: "Need soon" },
+            { key: "recent", label: "Recent" },
+            { key: "az", label: "A-Z" },
+          ].map((srt) => {
+            const active = sortMode === srt.key;
+            return (
+              <Pressable
+                key={srt.key}
+                onPress={() => setSortMode(srt.key as SortMode)}
+                style={[
+                  styles.sortChip,
+                  {
+                    backgroundColor: active ? colors.primary : colors.card,
+                    borderColor: active ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.sortChipText,
+                    {
+                      color: active ? colors.primaryForeground : colors.foreground,
+                    },
+                  ]}
+                >
+                  {srt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       </View>
       <FlatList
-        data={filtered}
-        keyExtractor={(item) => item.id}
+        data={rows}
+        keyExtractor={(row) => (row.kind === "item" ? row.item.id : row.id)}
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingBottom: 120,
           gap: 10,
         }}
-        renderItem={({ item }) => (
-          <ItemRow
-            item={item}
-            onPress={() => {
-              Alert.alert(
-                item.name,
-                "What do you want to do with this item?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  item.consumed
-                    ? {
-                        text: "Mark in stock",
-                        onPress: () => unmarkConsumed(item.id),
-                      }
-                    : {
-                        text: "I used it up",
-                        onPress: () => markConsumed(item.id),
-                      },
-                  {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: () => removeItem(item.id),
-                  },
-                ],
-              );
-            }}
-          />
-        )}
+        renderItem={({ item: row }) =>
+          row.kind === "item" ? (
+            <ItemRow
+              item={row.item}
+              onPress={() => {
+                Alert.alert(
+                  row.item.name,
+                  "What do you want to do with this item?",
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    row.item.consumed
+                      ? {
+                          text: "Mark in stock",
+                          onPress: () => unmarkConsumed(row.item.id),
+                        }
+                      : {
+                          text: "I used it up",
+                          onPress: () => markConsumed(row.item.id),
+                        },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: () => removeItem(row.item.id),
+                    },
+                  ],
+                );
+              }}
+            />
+          ) : (
+            <View style={{ gap: 8 }}>
+              <Pressable
+                onPress={() =>
+                  setExpandedGroups((prev) => ({
+                    ...prev,
+                    [row.id]: !prev[row.id],
+                  }))
+                }
+                style={[
+                  styles.groupRow,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.groupIcon,
+                    { backgroundColor: `${getCategoryTone(row.category)}22` },
+                  ]}
+                >
+                  <Feather name="layers" size={16} color={getCategoryTone(row.category)} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.groupHead}>
+                    <Text style={[styles.groupTitle, { color: colors.foreground }]}>
+                      {row.label}
+                    </Text>
+                    <Text style={[styles.groupCount, { color: colors.mutedForeground }]}>
+                      {row.count} items
+                    </Text>
+                  </View>
+                  <Text style={[styles.groupMeta, { color: colors.mutedForeground }]}>
+                    {row.category} · {row.dueInDays <= 0 ? "Need now" : `Need in ${row.dueInDays}d`}
+                    {row.organicCount > 0 ? ` · ${row.organicCount} organic` : ""}
+                  </Text>
+                </View>
+                <Feather
+                  name={expandedGroups[row.id] ? "chevron-down" : "chevron-right"}
+                  size={18}
+                  color={colors.mutedForeground}
+                />
+              </Pressable>
+              {expandedGroups[row.id]
+                ? row.members.map((member) => (
+                    <View key={member.id} style={styles.groupChildWrap}>
+                      <ItemRow
+                        item={member}
+                        onPress={() => {
+                          Alert.alert(
+                            member.name,
+                            "What do you want to do with this item?",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              member.consumed
+                                ? {
+                                    text: "Mark in stock",
+                                    onPress: () => unmarkConsumed(member.id),
+                                  }
+                                : {
+                                    text: "I used it up",
+                                    onPress: () => markConsumed(member.id),
+                                  },
+                              {
+                                text: "Delete",
+                                style: "destructive",
+                                onPress: () => removeItem(member.id),
+                              },
+                            ],
+                          );
+                        }}
+                      />
+                    </View>
+                  ))
+                : null}
+            </View>
+          )
+        }
         ListEmptyComponent={
           <EmptyState
             icon="package"
@@ -240,4 +417,60 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 13,
   },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  sortChipText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  groupRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+  },
+  groupIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  groupHead: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  groupTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
+    flex: 1,
+  },
+  groupCount: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  groupMeta: {
+    marginTop: 3,
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+  },
+  groupChildWrap: {
+    paddingLeft: 14,
+  },
 });
+
+function inferFamily(name: string): string | null {
+  const s = name.toLowerCase();
+  if (s.includes("salad") || s.includes("coleslaw") || s.includes("slaw")) {
+    return "Salads";
+  }
+  return null;
+}

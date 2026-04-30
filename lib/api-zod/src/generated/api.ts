@@ -33,6 +33,9 @@ export const AnalyzeReceiptBody = zod.object({
     ),
 });
 
+export const analyzeReceiptResponseItemsItemOrganicConfidenceMin = 0;
+export const analyzeReceiptResponseItemsItemOrganicConfidenceMax = 1;
+
 export const AnalyzeReceiptResponse = zod.object({
   items: zod.array(
     zod.object({
@@ -41,6 +44,22 @@ export const AnalyzeReceiptResponse = zod.object({
       quantity: zod.number(),
       unit: zod.string(),
       estimatedShelfLifeDays: zod.number(),
+      isOrganic: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when item is explicitly marked organic on packaging\/receipt text.",
+        ),
+      organicConfidence: zod
+        .number()
+        .min(analyzeReceiptResponseItemsItemOrganicConfidenceMin)
+        .max(analyzeReceiptResponseItemsItemOrganicConfidenceMax)
+        .optional()
+        .describe("Confidence score for organic inference (0..1)."),
+      organicSource: zod
+        .enum(["label", "name_keyword", "manual"])
+        .optional()
+        .describe("Where organic inference came from."),
     }),
   ),
   storeName: zod.string().optional(),

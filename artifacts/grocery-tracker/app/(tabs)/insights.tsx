@@ -15,38 +15,82 @@ import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
-import { getCategoryBreakdown } from "@/lib/insights";
+import { buildInsightModel, type InsightBarMetric } from "@/lib/insightRules";
+import type { Category } from "@/lib/types";
 
-const FRESH_CATEGORIES = new Set([
-  "Fruit",
-  "Vegetables",
-  "Meat",
-  "Dairy",
-  "Bakery",
-  "Prepared",
-]);
+function clampPct(v: number) {
+  return Math.max(0, Math.min(100, Math.round(v)));
+}
+
+function scoreLabel(score: number) {
+  if (score >= 75) return "Great basket";
+  if (score >= 55) return "Balanced";
+  return "Needs work";
+}
+
+function barStatus(metric: InsightBarMetric): "Good" | "OK" | "Low" {
+  const v = metric.invert ? 100 - metric.value : metric.value;
+  if (v >= 65) return "Good";
+  if (v >= 40) return "OK";
+  return "Low";
+}
+
+function spotlightText(category: Category) {
+  if (category === "Fruit" || category === "Vegetables") {
+    return "High in fiber and micronutrients. Great for daily balance.";
+  }
+  if (category === "Meat" || category === "Dairy") {
+    return "Solid protein source for satiety and recovery.";
+  }
+  if (category === "Prepared") {
+    return "Convenient choice. Pair with produce to improve balance.";
+  }
+  return "Useful pantry staple when paired with whole foods.";
+}
+
+function DeltaChip({
+  label,
+  value,
+  suffix,
+  colors,
+  invert = false,
+}: {
+  label: string;
+  value: number;
+  suffix: string;
+  colors: ReturnType<typeof useColors>;
+  invert?: boolean;
+}) {
+  const effective = invert ? -value : value;
+  const trend: "up" | "down" | "flat" =
+    effective > 0 ? "up" : effective < 0 ? "down" : "flat";
+  const icon = trend === "up" ? "trending-up" : trend === "down" ? "trending-down" : "minus";
+  const fg =
+    trend === "up" ? "#1b6a3a" : trend === "down" ? "#8a5600" : colors.mutedForeground;
+  const bg = trend === "up" ? "#e8f7ee" : trend === "down" ? "#fff4db" : `${colors.mutedForeground}22`;
+  const sign = value > 0 ? "+" : "";
+
+  return (
+    <View style={[styles.deltaChip, { backgroundColor: bg }]}>
+      <Text style={[styles.deltaChipLabel, { color: colors.mutedForeground }]}>{label}</Text>
+      <View style={styles.deltaChipMain}>
+        <Feather name={icon} size={12} color={fg} />
+        <Text style={[styles.deltaChipValue, { color: fg }]}>{`${sign}${value}${suffix}`}</Text>
+      </View>
+    </View>
+  );
+}
 
 export default function InsightsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { pantry } = usePantry();
+  const { pantry, scans } = usePantry();
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 16;
 
-  const freshShare = useMemo(() => {
-    if (pantry.length === 0) return null;
-    const breakdown = getCategoryBreakdown(pantry);
-    let fresh = 0;
-    let total = 0;
-    for (const row of breakdown) {
-      total += row.count;
-      if (FRESH_CATEGORIES.has(row.category)) fresh += row.count;
-    }
-    if (total === 0) return null;
-    return Math.round((fresh / total) * 100);
-  }, [pantry]);
+  const model = useMemo(() => buildInsightModel(pantry, scans), [pantry, scans]);
 
   return (
     <ScrollView
@@ -60,54 +104,210 @@ export default function InsightsScreen() {
     >
       <Text style={[styles.title, { color: colors.foreground }]}>Insights</Text>
       <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-        Health-focused guidance from your pantry and shopping — coming together here.
+        Visual nutrition snapshots from your pantry habits.
       </Text>
 
-      <View
-        style={[
-          styles.heroCard,
-          { backgroundColor: colors.card, borderColor: colors.border },
-        ]}
-      >
-        <View
-          style={[
-            styles.heroIcon,
-            { backgroundColor: `${colors.primary}1a` },
-          ]}
-        >
-          <Feather name="heart" size={22} color={colors.primary} />
-        </View>
-        <Text style={[styles.heroTitle, { color: colors.foreground }]}>
-          Eating & wellness insights
-        </Text>
-        <Text style={[styles.heroBody, { color: colors.mutedForeground }]}>
-          Soon this space will highlight balance across food groups, how often fresh
-          items show up in your scans, and gentle nudges based on your habits — all
-          from data you already add when you shop.
-        </Text>
-        <View style={{ marginTop: 14, gap: 10 }}>
-          <Bullet colors={colors} text="Variety and whole-food share from your categories" />
-          <Bullet colors={colors} text="Rhythm of produce, protein, and prepared foods" />
-          <Bullet colors={colors} text="Optional goals you set (e.g. more vegetables per week)" />
-        </View>
-      </View>
-
-      {pantry.length > 0 && freshShare != null ? (
+      {pantry.length > 0 ? (
         <View
           style={[
             styles.snapshot,
-            { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}35` },
+            { backgroundColor: colors.card, borderColor: colors.border },
           ]}
         >
-          <Text style={[styles.snapshotLabel, { color: colors.primary }]}>
-            Early snapshot
+          <View
+            style={[
+              styles.hero,
+              { backgroundColor: `${colors.primary}16`, borderColor: colors.border },
+            ]}
+          >
+            <View
+              style={[
+                styles.scoreRing,
+                { borderColor: colors.primary, backgroundColor: colors.background },
+              ]}
+            >
+              <Text style={[styles.scoreValue, { color: colors.foreground }]}>
+                {model.score}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.scoreTitle, { color: colors.foreground }]}>
+                This week's basket score
+              </Text>
+              <Text style={[styles.scoreLabel, { color: colors.primary }]}>
+                {scoreLabel(model.score)}
+              </Text>
+              <Text style={[styles.scoreSub, { color: colors.mutedForeground }]}>
+                Based on items currently in your pantry.
+              </Text>
+              <View
+                style={[
+                  styles.confidencePill,
+                  {
+                    backgroundColor:
+                      model.confidence.label === "High confidence"
+                        ? `${colors.success}22`
+                        : model.confidence.label === "Medium confidence"
+                          ? "#fff4db"
+                          : `${colors.mutedForeground}22`,
+                  },
+                ]}
+              >
+                <Feather
+                  name="shield"
+                  size={11}
+                  color={
+                    model.confidence.label === "High confidence"
+                      ? colors.success
+                      : model.confidence.label === "Medium confidence"
+                        ? "#8a5600"
+                        : colors.mutedForeground
+                  }
+                />
+                <Text
+                  style={[
+                    styles.confidenceText,
+                    {
+                      color:
+                        model.confidence.label === "High confidence"
+                          ? colors.success
+                          : model.confidence.label === "Medium confidence"
+                            ? "#8a5600"
+                            : colors.mutedForeground,
+                    },
+                  ]}
+                >
+                  {model.confidence.label}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.deltaRow}>
+            <DeltaChip label="Score" value={model.scoreDelta} suffix=" pts" colors={colors} />
+            <DeltaChip label="Fresh" value={model.freshDelta} suffix=" pp" colors={colors} />
+            <DeltaChip
+              label="Prepared"
+              value={model.preparedDelta}
+              suffix=" pp"
+              colors={colors}
+              invert
+            />
+          </View>
+
+          <View
+            style={[
+              styles.organicCard,
+              { backgroundColor: colors.background, borderColor: colors.border },
+            ]}
+          >
+            <View>
+              <Text style={[styles.organicLabel, { color: colors.mutedForeground }]}>
+                Organic share
+              </Text>
+              <Text style={[styles.organicValue, { color: colors.foreground }]}>
+                {model.organicShare}%
+              </Text>
+            </View>
+            <DeltaChip
+              label="vs last week"
+              value={model.organicDelta}
+              suffix=" pp"
+              colors={colors}
+            />
+          </View>
+
+          <Text style={[styles.snapshotLabel, { color: colors.foreground }]}>Nutrition snapshot</Text>
+          <View style={{ gap: 9 }}>
+            {model.bars.map((metric) => (
+              <View key={metric.key}>
+                <View style={styles.barHead}>
+                  <Text style={[styles.barLabel, { color: colors.foreground }]}>
+                    {metric.label}
+                  </Text>
+                  <Text style={[styles.barStatus, { color: colors.mutedForeground }]}>
+                    {barStatus(metric)}
+                  </Text>
+                </View>
+                <View style={[styles.barTrack, { backgroundColor: colors.muted }]}>
+                  <View
+                    style={[
+                      styles.barFill,
+                      {
+                        width: `${Math.max(4, clampPct(metric.value))}%`,
+                        backgroundColor: metric.invert ? "#cc8f2a" : colors.primary,
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+
+          <Text style={[styles.snapshotLabel, { color: colors.foreground, marginTop: 14 }]}>
+            Benefits in your pantry
           </Text>
-          <Text style={[styles.snapshotValue, { color: colors.foreground }]}>
-            About {freshShare}% of tracked line items are fresh or short-shelf categories
-            (fruit, vegetables, meat, dairy, bakery, prepared).
-          </Text>
+          <View style={styles.chips}>
+            {model.benefits.length > 0 ? (
+              model.benefits.map((chip) => (
+                <View
+                  key={chip}
+                  style={[
+                    styles.chip,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                  ]}
+                >
+                  <Text style={[styles.chipText, { color: colors.foreground }]}>{chip}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={[styles.snapshotHint, { color: colors.mutedForeground }]}>
+                Add a few more category types to unlock benefit tags.
+              </Text>
+            )}
+          </View>
+
+          {model.spotlight.length > 0 ? (
+            <View style={{ marginTop: 14, gap: 8 }}>
+              <Text style={[styles.snapshotLabel, { color: colors.foreground }]}>Item spotlight</Text>
+              {model.spotlight.map((s) => (
+                <View
+                  key={s.id}
+                  style={[
+                    styles.spotlightCard,
+                    { backgroundColor: colors.background, borderColor: colors.border },
+                  ]}
+                >
+                  <View style={styles.spotlightHead}>
+                    <Text style={[styles.spotlightName, { color: colors.foreground }]}>{s.name}</Text>
+                    <Text style={[styles.spotlightCat, { color: colors.mutedForeground }]}>
+                      {s.category}
+                    </Text>
+                  </View>
+                  <Text style={[styles.spotlightBody, { color: colors.mutedForeground }]}>
+                    {spotlightText(s.category)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View
+            style={[
+              styles.actionCard,
+              { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}40` },
+            ]}
+          >
+            <Text style={[styles.actionTitle, { color: colors.primary }]}>
+              Improve this week
+            </Text>
+            <Text style={[styles.actionBody, { color: colors.foreground }]}>
+              {model.action}
+            </Text>
+          </View>
+
           <Text style={[styles.snapshotHint, { color: colors.mutedForeground }]}>
-            This is a simple ratio from your pantry labels, not medical advice.
+            {model.confidence.note} Directional estimate from pantry category data, not medical advice.
           </Text>
         </View>
       ) : (
@@ -162,21 +362,6 @@ export default function InsightsScreen() {
   );
 }
 
-function Bullet({
-  colors,
-  text,
-}: {
-  colors: ReturnType<typeof useColors>;
-  text: string;
-}) {
-  return (
-    <View style={styles.bulletRow}>
-      <Feather name="check-circle" size={16} color={colors.success} />
-      <Text style={[styles.bulletText, { color: colors.foreground }]}>{text}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   title: {
     fontFamily: "Inter_700Bold",
@@ -187,71 +372,209 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     marginTop: 4,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  heroCard: {
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 18,
-  },
-  heroIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  heroTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  heroBody: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  bulletRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  bulletText: {
-    flex: 1,
-    fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    marginBottom: 14,
     lineHeight: 19,
   },
   snapshot: {
-    marginTop: 18,
+    marginTop: 8,
     padding: 14,
     borderRadius: 14,
     borderWidth: 1,
   },
+  hero: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+  },
+  deltaRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  deltaChip: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    gap: 2,
+  },
+  deltaChipLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 10,
+  },
+  deltaChipMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  deltaChipValue: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 12,
+  },
+  organicCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  organicLabel: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+  },
+  organicValue: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 24,
+    marginTop: 2,
+  },
+  scoreRing: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scoreValue: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 28,
+  },
+  scoreTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  scoreLabel: {
+    marginTop: 2,
+    fontFamily: "Inter_700Bold",
+    fontSize: 22,
+  },
+  scoreSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    marginTop: 1,
+    lineHeight: 17,
+  },
+  confidencePill: {
+    marginTop: 6,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    borderRadius: 999,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+  },
+  confidenceText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10.5,
+  },
   snapshotLabel: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    letterSpacing: 0.5,
+    fontSize: 12,
     marginBottom: 6,
   },
-  snapshotValue: {
+  barHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  barLabel: {
     fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  barStatus: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+  },
+  barTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  chips: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  chip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  chipText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+  },
+  spotlightCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 10,
+  },
+  spotlightHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  spotlightName: {
+    flex: 1,
+    fontFamily: "Inter_600SemiBold",
     fontSize: 14,
-    lineHeight: 20,
+  },
+  spotlightCat: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+  },
+  spotlightBody: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    marginTop: 5,
+    lineHeight: 17,
+  },
+  actionCard: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 10,
+  },
+  actionTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 3,
+  },
+  actionBody: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
+    lineHeight: 19,
   },
   snapshotHint: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    marginTop: 8,
+    marginTop: 10,
     lineHeight: 17,
   },
   sectionLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 11,
     letterSpacing: 0.6,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   linkRow: {
     flexDirection: "row",

@@ -84,11 +84,32 @@ function normalizeReceiptItems(
     .map((it) => {
       const qty =
         typeof it.quantity === "number" && Number.isFinite(it.quantity) ? it.quantity : 1;
+      const name = it.name.trim();
+      const nameLower = name.toLowerCase();
+      const inferredOrganic = /\borganic\b|\borg\b/.test(nameLower);
+      const modelOrganic =
+        typeof it.isOrganic === "boolean" ? it.isOrganic : undefined;
+      const organicSource =
+        typeof it.organicSource === "string" ? it.organicSource : undefined;
+      const organicConfidence =
+        typeof it.organicConfidence === "number" &&
+        Number.isFinite(it.organicConfidence)
+          ? Math.max(0, Math.min(1, it.organicConfidence))
+          : undefined;
+
       return {
         ...it,
-        name: it.name.trim(),
+        name,
         quantity: Math.max(1, qty),
         category: normalizeCategoryLabel(it.category),
+        isOrganic:
+          modelOrganic != null ? modelOrganic : inferredOrganic ? true : undefined,
+        organicConfidence:
+          organicConfidence ??
+          (modelOrganic == null ? (inferredOrganic ? 0.62 : undefined) : 0.8),
+        organicSource:
+          organicSource ??
+          (modelOrganic != null ? "label" : inferredOrganic ? "name_keyword" : undefined),
       };
     })
     .filter((it) => it.name.length >= 2);
@@ -175,6 +196,10 @@ SHARED RULES (all source types)
   - Bread/bakery: 7 | Frozen items: 120 | Prepared ready meals: 5–7
   - Dry pantry staples: 365 | Household/personal care: 999
 • If the image is unclear or contains zero grocery items, return items: [].
+• Organic fields (optional but useful):
+  - isOrganic: true only when "organic/ORG" is explicitly visible or strongly implied by product text.
+  - organicConfidence: number 0..1 for that inference.
+  - organicSource: one of label, name_keyword, manual.
 • Return ONLY valid JSON matching the schema. No markdown, no commentary.`;
 
 // Primary model, with one fallback

@@ -39,6 +39,7 @@ export function ShoppingActivityScreen() {
     [pantry],
   );
   const restocks = useMemo(() => getPredictedRestocks(pantry), [pantry]);
+  const groupedRestocks = useMemo(() => groupRestocks(restocks), [restocks]);
   const predictable = useMemo(() => getMostPredictable(pantry), [pantry]);
 
   const isWeb = Platform.OS === "web";
@@ -65,10 +66,16 @@ export function ShoppingActivityScreen() {
 
   const changeColor =
     summary.weeklyChange > 0
-      ? colors.warning
+      ? "#8a5600"
       : summary.weeklyChange < 0
-        ? colors.success
-        : colors.mutedForeground;
+        ? "#1b6a3a"
+        : "#35513f";
+  const changeBg =
+    summary.weeklyChange > 0
+      ? "#fff4db"
+      : summary.weeklyChange < 0
+        ? "#e8f7ee"
+        : "rgba(255,255,255,0.48)";
   const changeIcon =
     summary.weeklyChange > 0
       ? "trending-up"
@@ -82,7 +89,7 @@ export function ShoppingActivityScreen() {
       contentContainerStyle={{
         paddingTop: topPad,
         paddingHorizontal: 20,
-        paddingBottom: insets.bottom + 32,
+        paddingBottom: insets.bottom + 24,
       }}
       showsVerticalScrollIndicator={false}
     >
@@ -108,7 +115,7 @@ export function ShoppingActivityScreen() {
           >
             THIS WEEK
           </Text>
-          <View style={styles.deltaRow}>
+          <View style={[styles.deltaRow, { backgroundColor: changeBg }]}>
             <Feather name={changeIcon} size={14} color={changeColor} />
             <Text style={[styles.deltaText, { color: changeColor }]}>
               {summary.weeklyChange === 0
@@ -158,15 +165,15 @@ export function ShoppingActivityScreen() {
       </View>
 
       {restocks.length > 0 && (
-        <View style={{ marginTop: 32 }}>
+        <View style={{ marginTop: 22 }}>
           <SectionHeader
             title="Coming up"
             caption="Predicted to need restocking soon"
           />
           <View style={{ gap: 8 }}>
-            {restocks.map((r) => (
+            {groupedRestocks.map((group) => (
               <View
-                key={r.id}
+                key={group.id}
                 style={[
                   styles.restockRow,
                   {
@@ -175,10 +182,10 @@ export function ShoppingActivityScreen() {
                   },
                 ]}
               >
-                <CategoryIcon category={r.category} size={32} />
+                <CategoryIcon category={group.category} size={32} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.restockName, { color: colors.foreground }]}>
-                    {r.name}
+                    {group.label}
                   </Text>
                   <Text
                     style={[
@@ -186,7 +193,8 @@ export function ShoppingActivityScreen() {
                       { color: colors.mutedForeground },
                     ]}
                   >
-                    {r.category}
+                    {group.category}
+                    {group.count > 1 ? ` · ${group.count} items` : ""}
                   </Text>
                 </View>
                 <View style={styles.restockRight}>
@@ -195,19 +203,19 @@ export function ShoppingActivityScreen() {
                       styles.restockDays,
                       {
                         color:
-                          r.dueInDays <= 0
+                          group.dueInDays <= 0
                             ? colors.destructive
-                            : r.dueInDays <= 3
+                            : group.dueInDays <= 3
                               ? colors.warning
                               : colors.foreground,
                       },
                     ]}
                   >
-                    {r.dueInDays <= 0
+                    {group.dueInDays <= 0
                       ? "Now"
-                      : r.dueInDays === 1
+                      : group.dueInDays === 1
                         ? "1 day"
-                        : `${r.dueInDays} days`}
+                        : `${group.dueInDays} days`}
                   </Text>
                 </View>
               </View>
@@ -217,7 +225,7 @@ export function ShoppingActivityScreen() {
       )}
 
       {topItems.length > 0 && (
-        <View style={{ marginTop: 32 }}>
+        <View style={{ marginTop: 24 }}>
           <SectionHeader
             title="Most bought"
             caption="The staples in your kitchen"
@@ -277,7 +285,7 @@ export function ShoppingActivityScreen() {
       )}
 
       {categoryBreakdown.length > 0 && (
-        <View style={{ marginTop: 32 }}>
+        <View style={{ marginTop: 24 }}>
           <SectionHeader
             title="Categories"
             caption="What fills your pantry"
@@ -333,7 +341,7 @@ export function ShoppingActivityScreen() {
       )}
 
       {predictable.length > 0 && (
-        <View style={{ marginTop: 32 }}>
+        <View style={{ marginTop: 24 }}>
           <SectionHeader
             title="Most predictable"
             caption="You buy these like clockwork"
@@ -388,6 +396,56 @@ export function ShoppingActivityScreen() {
   );
 }
 
+function inferFamilyLabel(name: string): string | null {
+  const lower = name.toLowerCase();
+  if (
+    lower.includes("salad") ||
+    lower.includes("coleslaw") ||
+    lower.includes("slaw")
+  ) {
+    return "Salads";
+  }
+  if (lower.includes("milk")) return "Milk";
+  if (lower.includes("bread") || lower.includes("pita")) return "Bread";
+  return null;
+}
+
+function groupRestocks(restocks: ReturnType<typeof getPredictedRestocks>) {
+  const groups = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      category: (typeof restocks)[number]["category"];
+      count: number;
+      dueInDays: number;
+    }
+  >();
+
+  for (const item of restocks) {
+    const family = inferFamilyLabel(item.name);
+    const key = `${item.category}:${family ?? item.name}`;
+    const label = family ?? item.name;
+    const existing = groups.get(key);
+
+    if (!existing) {
+      groups.set(key, {
+        id: key,
+        label,
+        category: item.category,
+        count: 1,
+        dueInDays: item.dueInDays,
+      });
+      continue;
+    }
+
+    existing.count += 1;
+    existing.dueInDays = Math.min(existing.dueInDays, item.dueInDays);
+  }
+
+  return [...groups.values()].sort((a, b) => a.dueInDays - b.dueInDays);
+}
+
 function MiniStat({
   label,
   value,
@@ -435,7 +493,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 14,
     marginTop: 4,
-    marginBottom: 20,
+    marginBottom: 14,
   },
   summaryCard: {
     padding: 20,
@@ -455,7 +513,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "rgba(255,255,255,0.18)",
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
@@ -478,13 +535,13 @@ const styles = StyleSheet.create({
   miniRow: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 14,
+    marginTop: 10,
   },
   miniStat: {
     flex: 1,
     borderWidth: 1,
     borderRadius: 16,
-    padding: 12,
+    padding: 11,
   },
   miniHeader: {
     flexDirection: "row",

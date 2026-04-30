@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { StatusPill } from "@/components/StatusPill";
 import { useColors } from "@/hooks/useColors";
+import { getCategoryTone } from "@/lib/categories";
 import {
   getDaysUntilNeeded,
   getItemStatus,
@@ -33,6 +34,7 @@ export function ItemRow({
   const colors = useColors();
   const status = getItemStatus(item);
   const days = getDaysUntilNeeded(item);
+  const tone = getCategoryTone(item.category);
 
   return (
     <Pressable
@@ -42,6 +44,8 @@ export function ItemRow({
         {
           backgroundColor: colors.card,
           borderColor: colors.border,
+          borderLeftColor: tone,
+          borderLeftWidth: 3,
           opacity: pressed ? 0.85 : 1,
         },
       ]}
@@ -61,6 +65,11 @@ export function ItemRow({
         </View>
         <View style={styles.metaRow}>
           <StatusPill status={status} />
+          {item.isOrganic ? (
+            <View style={[styles.organicPill, { backgroundColor: `${colors.success}22` }]}>
+              <Text style={[styles.organicText, { color: colors.success }]}>ORGANIC</Text>
+            </View>
+          ) : null}
           <Text
             style={[styles.meta, { color: colors.mutedForeground }]}
             numberOfLines={1}
@@ -116,5 +125,15 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     flexShrink: 1,
+  },
+  organicPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  organicText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 9,
+    letterSpacing: 0.6,
   },
 });

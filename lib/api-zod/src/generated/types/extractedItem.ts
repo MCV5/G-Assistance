@@ -4,6 +4,7 @@
  * Api
  * OpenAPI spec version: 0.1.0
  */
+import type { ExtractedItemOrganicSource } from "./extractedItemOrganicSource";
 
 export interface ExtractedItem {
   name: string;
@@ -11,4 +12,14 @@ export interface ExtractedItem {
   quantity: number;
   unit: string;
   estimatedShelfLifeDays: number;
+  /** True when item is explicitly marked organic on packaging/receipt text. */
+  isOrganic?: boolean;
+  /**
+   * Confidence score for organic inference (0..1).
+   * @minimum 0
+   * @maximum 1
+   */
+  organicConfidence?: number;
+  /** Where organic inference came from. */
+  organicSource?: ExtractedItemOrganicSource;
 }

@@ -40,10 +40,14 @@ const iconMap = {
   tag: "tag" as FeatherName,
 };
 
-export function getCategoryIcon(category: Category): FeatherName {
-  return iconMap[CATEGORY_META[category].icon];
+function getCategoryMetaSafe(category: string) {
+  return CATEGORY_META[category as Category] ?? CATEGORY_META.Other;
 }
 
-export function getCategoryTone(category: Category): string {
-  return CATEGORY_META[category].tone;
+export function getCategoryIcon(category: Category | string): FeatherName {
+  return iconMap[getCategoryMetaSafe(category).icon];
+}
+
+export function getCategoryTone(category: Category | string): string {
+  return getCategoryMetaSafe(category).tone;
 }

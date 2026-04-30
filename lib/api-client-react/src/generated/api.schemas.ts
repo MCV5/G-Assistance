@@ -28,12 +28,34 @@ export interface ReceiptInput {
   scannedAt?: string;
 }
 
+/**
+ * Where organic inference came from.
+ */
+export type ExtractedItemOrganicSource =
+  (typeof ExtractedItemOrganicSource)[keyof typeof ExtractedItemOrganicSource];
+
+export const ExtractedItemOrganicSource = {
+  label: "label",
+  name_keyword: "name_keyword",
+  manual: "manual",
+} as const;
+
 export interface ExtractedItem {
   name: string;
   category: string;
   quantity: number;
   unit: string;
   estimatedShelfLifeDays: number;
+  /** True when item is explicitly marked organic on packaging/receipt text. */
+  isOrganic?: boolean;
+  /**
+   * Confidence score for organic inference (0..1).
+   * @minimum 0
+   * @maximum 1
+   */
+  organicConfidence?: number;
+  /** Where organic inference came from. */
+  organicSource?: ExtractedItemOrganicSource;
 }
 
 export interface ReceiptResult {

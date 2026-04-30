@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -13,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { boldTheme as D } from "@/constants/colors";
 import { usePantry } from "@/contexts/PantryContext";
+import { getCategoryTone } from "@/lib/categories";
 import { useAuth } from "@/lib/auth";
 import { getItemStatus } from "@/lib/predictions";
 import type { PantryItem } from "@/lib/types";
@@ -76,10 +78,12 @@ export default function HomeScreen() {
     runningLow,
     freshCount,
     healthPct,
-    categoryBreakdown,
+    categoryBreakdownTop,
+    categoryBreakdownAll,
     recentItems,
     totalItems,
     categoryCount,
+    activeCount,
   } = useMemo(() => {
     const active = pantry.filter((p) => !p.consumed);
 
@@ -99,9 +103,10 @@ export default function HomeScreen() {
     for (const item of active) {
       catMap[item.category] = (catMap[item.category] ?? 0) + 1;
     }
-    const categoryBreakdown = Object.entries(catMap)
+    const categoryBreakdownAll = Object.entries(catMap)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5);
+      .map(([cat, count]) => ({ cat, count }));
+    const categoryBreakdownTop = categoryBreakdownAll.slice(0, 5);
 
     const categoryCount = Object.keys(catMap).length;
 
@@ -110,11 +115,24 @@ export default function HomeScreen() {
       .sort((a, b) => new Date(b.lastPurchasedAt).getTime() - new Date(a.lastPurchasedAt).getTime())
       .slice(0, 3);
 
-    return { runningLow, freshCount, healthPct, categoryBreakdown, recentItems, totalItems, categoryCount };
+    return {
+      runningLow,
+      freshCount,
+      healthPct,
+      categoryBreakdownTop,
+      categoryBreakdownAll,
+      recentItems,
+      totalItems,
+      categoryCount,
+      activeCount: active.length,
+    };
   }, [pantry]);
 
   const lastScan = scans[0];
-  const maxCatCount = categoryBreakdown[0]?.[1] ?? 1;
+  const maxCatCount = categoryBreakdownTop[0]?.count ?? 1;
+  const [infoModal, setInfoModal] = useState<
+    "items" | "categories" | "fresh" | "lastScan" | "categoryBreakdown" | null
+  >(null);
 
   const topPad = Platform.OS === "web" ? 0 : insets.top;
   const botPad = Platform.OS === "web" ? 110 : 110;
@@ -221,43 +239,50 @@ export default function HomeScreen() {
                 value={String(totalItems)}
                 sub={`+${scans.length} scan${scans.length === 1 ? "" : "s"}`}
                 accent
+                onPress={() => setInfoModal("items")}
               />
               <StatBox
                 label="CATEGORIES"
                 value={String(categoryCount)}
                 sub="all stocked"
+                onPress={() => setInfoModal("categories")}
               />
               <StatBox
                 label="FRESH"
                 value={String(freshCount)}
                 sub="in pantry"
+                onPress={() => setInfoModal("fresh")}
               />
               <StatBox
                 label="LAST SCAN"
                 value={lastScan ? lastScanLabel(new Date(lastScan.scannedAt)) : "—"}
                 sub={lastScan ? `${lastScan.itemCount} items` : "no scans yet"}
+                onPress={() => setInfoModal("lastScan")}
               />
             </View>
           </View>
 
           {/* ── By category ── */}
-          {categoryBreakdown.length > 0 && (
+          {categoryBreakdownTop.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionHead}>
                 <Text style={s.sectionTitle}>BY CATEGORY</Text>
-                <Pressable onPress={() => router.push("/(tabs)/pantry")}>
+                <Pressable onPress={() => setInfoModal("categoryBreakdown")}>
                   <Text style={s.seeAll}>Details</Text>
                 </Pressable>
               </View>
               <View style={{ gap: 10 }}>
-                {categoryBreakdown.map(([cat, count]) => (
+                {categoryBreakdownTop.map(({ cat, count }) => (
                   <View key={cat} style={s.catRow}>
                     <Text style={s.catName}>{cat}</Text>
                     <View style={s.catTrack}>
                       <View
                         style={[
                           s.catFill,
-                          { width: `${Math.round((count / maxCatCount) * 100)}%` },
+                          {
+                            width: `${Math.round((count / maxCatCount) * 100)}%`,
+                            backgroundColor: getCategoryTone(cat),
+                          },
                         ]}
                       />
                     </View>
@@ -350,6 +375,78 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+      <Modal
+        visible={infoModal != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInfoModal(null)}
+      >
+        <Pressable style={s.modalBackdrop} onPress={() => setInfoModal(null)}>
+          <Pressable style={s.modalCard} onPress={() => {}}>
+            {infoModal === "items" ? (
+              <>
+                <Text style={s.modalTitle}>Items tracked</Text>
+                <Text style={s.modalBody}>
+                  You currently have {activeCount} active pantry items. This reflects items
+                  in stock and excludes consumed items.
+                </Text>
+              </>
+            ) : null}
+            {infoModal === "categories" ? (
+              <>
+                <Text style={s.modalTitle}>Categories</Text>
+                <Text style={s.modalBody}>
+                  Your pantry spans {categoryCount} categories. More variety usually improves
+                  nutrition balance.
+                </Text>
+              </>
+            ) : null}
+            {infoModal === "fresh" ? (
+              <>
+                <Text style={s.modalTitle}>Fresh items</Text>
+                <Text style={s.modalBody}>
+                  {freshCount} items are currently marked fresh based on shelf-life and recent
+                  purchase timing.
+                </Text>
+              </>
+            ) : null}
+            {infoModal === "lastScan" ? (
+              <>
+                <Text style={s.modalTitle}>Last scan</Text>
+                <Text style={s.modalBody}>
+                  {lastScan
+                    ? `Your latest scan was ${lastScanLabel(
+                        new Date(lastScan.scannedAt),
+                      )} with ${lastScan.itemCount} item${lastScan.itemCount === 1 ? "" : "s"}.`
+                    : "No scans yet. Start by scanning one receipt to populate insights."}
+                </Text>
+              </>
+            ) : null}
+            {infoModal === "categoryBreakdown" ? (
+              <>
+                <Text style={s.modalTitle}>Category breakdown</Text>
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {categoryBreakdownAll.map(({ cat, count }) => (
+                    <View key={cat} style={s.modalCatRow}>
+                      <View
+                        style={[
+                          s.modalDot,
+                          { backgroundColor: getCategoryTone(cat) },
+                        ]}
+                      />
+                      <Text style={s.modalCatLabel}>{cat}</Text>
+                      <Text style={s.modalCatValue}>{count}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            ) : null}
+            <Pressable style={s.modalClose} onPress={() => setInfoModal(null)}>
+              <Text style={s.modalCloseText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -357,16 +454,23 @@ export default function HomeScreen() {
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatBox({
-  label, value, sub, accent,
+  label, value, sub, accent, onPress,
 }: {
-  label: string; value: string; sub: string; accent?: boolean;
+  label: string; value: string; sub: string; accent?: boolean; onPress?: () => void;
 }) {
   return (
-    <View style={[s.statBox, accent && s.statBoxAccent]}>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        s.statBox,
+        accent && s.statBoxAccent,
+        onPress && pressed ? { opacity: 0.85 } : null,
+      ]}
+    >
       <Text style={[s.statLabel, accent && s.statLabelAccent]}>{label}</Text>
       <Text style={[s.statValue, accent && s.statValueAccent]}>{value}</Text>
       <Text style={[s.statSub, accent && s.statSubAccent]}>{sub}</Text>
-    </View>
+    </Pressable>
   );
 }
 
@@ -660,7 +764,6 @@ const s = StyleSheet.create({
   },
   catFill: {
     height: "100%",
-    backgroundColor: D.greenMid,
     borderRadius: 3,
   },
   catCount: {
@@ -817,6 +920,68 @@ const s = StyleSheet.create({
   emptyLink: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
+    color: D.greenMid,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: D.cream,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    padding: 14,
+    gap: 6,
+  },
+  modalTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: D.inkBlack,
+  },
+  modalBody: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    lineHeight: 19,
+    color: D.inkMid,
+  },
+  modalClose: {
+    alignSelf: "flex-end",
+    marginTop: 8,
+    backgroundColor: D.greenMid,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  modalCloseText: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.cream,
+  },
+  modalCatRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  modalDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  modalCatLabel: {
+    flex: 1,
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: D.inkBlack,
+  },
+  modalCatValue: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 12,
     color: D.greenMid,
   },
 });

@@ -42,6 +42,9 @@ export interface PantryItem {
   id: string;
   name: string;
   category: Category;
+  isOrganic?: boolean;
+  organicConfidence?: number;
+  organicSource?: "label" | "name_keyword" | "manual";
   quantity: number;
   unit: string;
   estimatedShelfLifeDays: number;

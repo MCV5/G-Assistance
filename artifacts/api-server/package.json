@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev:local": "pnpm run build && pnpm run start:local",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "start:local": "node --require dotenv/config --enable-source-maps -e \"process.env.PORT = '3001'; import('./dist/index.mjs');\" dotenv_config_path=../../.env",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

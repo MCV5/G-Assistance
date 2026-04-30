@@ -195,6 +195,10 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             quantity: existing.quantity + incoming.quantity,
             unit: incoming.unit || existing.unit,
             category: cat,
+            isOrganic: incoming.isOrganic ?? existing.isOrganic,
+            organicConfidence:
+              incoming.organicConfidence ?? existing.organicConfidence,
+            organicSource: incoming.organicSource ?? existing.organicSource,
             estimatedShelfLifeDays:
               incoming.estimatedShelfLifeDays || existing.estimatedShelfLifeDays,
             lastPurchasedAt: purchaseDateIso,
@@ -214,6 +218,9 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             id: newId(),
             name: incoming.name.trim(),
             category: cat,
+            isOrganic: incoming.isOrganic,
+            organicConfidence: incoming.organicConfidence,
+            organicSource: incoming.organicSource,
             quantity: incoming.quantity,
             unit: incoming.unit,
             estimatedShelfLifeDays: incoming.estimatedShelfLifeDays,

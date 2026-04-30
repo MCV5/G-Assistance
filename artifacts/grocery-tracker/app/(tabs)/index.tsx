@@ -59,7 +59,7 @@ function urgencyLabel(item: PantryItem): { text: string; urgent: boolean } {
   return { text: `IN ${days} DAYS`, urgent: false };
 }
 
-function getInitials(firstName?: string | null, email?: string): string {
+function getInitials(firstName?: string | null, email?: string | null): string {
   if (firstName) return firstName.slice(0, 2).toUpperCase();
   if (email)     return email.slice(0, 2).toUpperCase();
   return "?";
@@ -136,11 +136,16 @@ export default function HomeScreen() {
               <Text style={s.greeting}>{greetingByHour()}</Text>
               <Text style={s.name}>{displayName}.</Text>
             </View>
-            <View style={s.avatar}>
+            <Pressable
+              onPress={() => router.push("/profile")}
+              accessibilityRole="button"
+              accessibilityLabel="Profile and account"
+              style={({ pressed }) => [s.avatar, { opacity: pressed ? 0.85 : 1 }]}
+            >
               <Text style={s.avatarTxt}>
                 {getInitials(user?.firstName, user?.email)}
               </Text>
-            </View>
+            </Pressable>
           </View>
 
           {/* Pantry health bar */}
@@ -367,9 +372,19 @@ function StatBox({
 
 function categoryEmoji(cat: string): string {
   const map: Record<string, string> = {
-    Produce: "🥦", Dairy: "🥛", Meat: "🥩", Pantry: "🫙",
-    Bakery: "🍞", Beverages: "🧃", Frozen: "🧊", Snacks: "🍿",
-    Household: "🧹", "Personal Care": "🧴", Other: "📦",
+    Fruit: "🍎",
+    Vegetables: "🥦",
+    Dairy: "🥛",
+    Meat: "🥩",
+    Pantry: "🫙",
+    Bakery: "🍞",
+    Beverages: "🧃",
+    Frozen: "🧊",
+    Snacks: "🍿",
+    Household: "🧹",
+    "Personal Care": "🧴",
+    Prepared: "🥡",
+    Other: "📦",
   };
   return map[cat] ?? "📦";
 }

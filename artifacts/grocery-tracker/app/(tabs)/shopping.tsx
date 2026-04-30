@@ -4,24 +4,22 @@ import { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
-  Modal,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AddItemModal } from "@/components/AddItemModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SectionHeader } from "@/components/SectionHeader";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
-import { CATEGORIES, type Category, type ShoppingListItem } from "@/lib/types";
+import { type Category, type ShoppingListItem } from "@/lib/types";
 
 export default function ShoppingScreen() {
   const colors = useColors();
@@ -34,8 +32,6 @@ export default function ShoppingScreen() {
     clearCheckedShoppingItems,
   } = usePantry();
   const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState<Category>("Produce");
 
   const grouped = useMemo(() => {
     const predicted = shoppingList.filter((s) => s.reason !== "manual");
@@ -46,17 +42,6 @@ export default function ShoppingScreen() {
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 12;
   const checkedCount = shoppingList.filter((s) => s.checked).length;
-
-  function submitManual() {
-    if (!name.trim()) return;
-    addManualShoppingItem(name.trim(), category);
-    setName("");
-    setCategory("Produce");
-    setAddOpen(false);
-    if (Platform.OS !== "web") {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -176,96 +161,16 @@ export default function ShoppingScreen() {
         }
       />
 
-      <Modal
+      <AddItemModal
         visible={addOpen}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setAddOpen(false)}
-      >
-        <View
-          style={[
-            styles.modalContainer,
-            { backgroundColor: colors.background },
-          ]}
-        >
-          <View style={styles.modalHeader}>
-            <Text style={[styles.modalTitle, { color: colors.foreground }]}>
-              New item
-            </Text>
-            <Pressable onPress={() => setAddOpen(false)}>
-              <Feather name="x" size={22} color={colors.foreground} />
-            </Pressable>
-          </View>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="What do you need?"
-            placeholderTextColor={colors.mutedForeground}
-            autoFocus
-            style={[
-              styles.input,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                color: colors.foreground,
-              },
-            ]}
-          />
-          <Text
-            style={[
-              styles.modalSection,
-              { color: colors.mutedForeground },
-            ]}
-          >
-            CATEGORY
-          </Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 8, paddingVertical: 8 }}
-          >
-            {CATEGORIES.map((c) => {
-              const active = category === c;
-              return (
-                <Pressable
-                  key={c}
-                  onPress={() => setCategory(c)}
-                  style={[
-                    styles.catChip,
-                    {
-                      backgroundColor: active ? colors.primary : colors.card,
-                      borderColor: active ? colors.primary : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.catChipText,
-                      {
-                        color: active
-                          ? colors.primaryForeground
-                          : colors.foreground,
-                      },
-                    ]}
-                  >
-                    {c}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <View style={{ marginTop: 24 }}>
-            <PrimaryButton
-              label="Add to list"
-              icon="plus"
-              fullWidth
-              size="lg"
-              disabled={!name.trim()}
-              onPress={submitManual}
-            />
-          </View>
-        </View>
-      </Modal>
+        title="Add to list"
+        submitLabel="Add to list"
+        onClose={() => setAddOpen(false)}
+        onSubmit={(name, category) => {
+          addManualShoppingItem(name, category);
+          setAddOpen(false);
+        }}
+      />
     </View>
   );
 }
@@ -410,44 +315,5 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     fontSize: 12,
     marginTop: 2,
-  },
-  modalContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 22,
-  },
-  input: {
-    height: 52,
-    paddingHorizontal: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    fontFamily: "Inter_500Medium",
-    fontSize: 16,
-  },
-  modalSection: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    letterSpacing: 0.6,
-    marginTop: 20,
-  },
-  catChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-  },
-  catChipText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
   },
 });

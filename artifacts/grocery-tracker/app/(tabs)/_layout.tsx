@@ -29,7 +29,7 @@ function NativeTabLayout() {
         <Label>Shop</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="insights">
-        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
+        <Icon sf={{ default: "heart", selected: "heart.fill" }} />
         <Label>Insights</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
@@ -129,9 +129,9 @@ function ClassicTabLayout() {
           title: "Insights",
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="chart.bar" tintColor={color} size={24} />
+              <SymbolView name="heart" tintColor={color} size={24} />
             ) : (
-              <Feather name="bar-chart-2" size={22} color={color} />
+              <Feather name="heart" size={22} color={color} />
             ),
         }}
       />

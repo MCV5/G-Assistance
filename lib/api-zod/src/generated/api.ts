@@ -16,10 +16,21 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Extract grocery items from a receipt or photo
  */
+export const analyzeReceiptBodyScannedAtRegExp = new RegExp(
+  "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+);
+
 export const AnalyzeReceiptBody = zod.object({
   imageBase64: zod.string(),
   mimeType: zod.string(),
   sourceType: zod.enum(["receipt", "bag", "cart"]),
+  scannedAt: zod
+    .string()
+    .regex(analyzeReceiptBodyScannedAtRegExp)
+    .optional()
+    .describe(
+      "Local calendar date when the user started analysis (YYYY-MM-DD). Used when the receipt has no printed purchase date.",
+    ),
 });
 
 export const AnalyzeReceiptResponse = zod.object({
@@ -34,6 +45,12 @@ export const AnalyzeReceiptResponse = zod.object({
   ),
   storeName: zod.string().optional(),
   purchaseDate: zod.string().optional(),
+  purchaseDateIsEstimated: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when purchaseDate was derived from scannedAt (no date on receipt).",
+    ),
 });
 
 /**

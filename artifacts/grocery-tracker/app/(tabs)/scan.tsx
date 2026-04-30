@@ -20,26 +20,38 @@ import { useAnalyzeReceipt } from "@workspace/api-client-react";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useColors } from "@/hooks/useColors";
 
+function localCalendarDateYyyyMmDd(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 type SourceType = "receipt" | "bag" | "cart";
 
-const SOURCE_OPTIONS: { key: SourceType; label: string; description: string; icon: React.ComponentProps<typeof Feather>["name"] }[] = [
+const SOURCE_OPTIONS: {
+  key: SourceType;
+  label: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
+  tip: string;
+}[] = [
   {
     key: "receipt",
     label: "Receipt",
-    description: "A printed grocery receipt",
     icon: "file-text",
+    tip: "Lay the receipt flat, use good lighting, and fit the full receipt in frame.",
   },
   {
     key: "bag",
     label: "Bag",
-    description: "Items inside a shopping bag",
     icon: "shopping-bag",
+    tip: "Hold the bag open and capture as many product labels as possible.",
   },
   {
     key: "cart",
     label: "Cart",
-    description: "Items in a shopping cart",
     icon: "shopping-cart",
+    tip: "Shoot from above so item labels are visible and not overlapping.",
   },
 ];
 
@@ -47,7 +59,12 @@ export default function ScanScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const [sourceType, setSourceType] = useState<SourceType>("receipt");
-  const [preview, setPreview] = useState<{ uri: string; base64: string; mimeType: string } | null>(null);
+  const [preview, setPreview] = useState<{
+    uri: string;
+    base64: string;
+    mimeType: string;
+  } | null>(null);
+  const currentTip = SOURCE_OPTIONS.find((o) => o.key === sourceType)?.tip;
 
   const analyze = useAnalyzeReceipt({
     mutation: {
@@ -64,18 +81,26 @@ export default function ScanScreen() {
         router.push(`/scan-review?data=${payload}`);
       },
       onError: (err) => {
-        Alert.alert(
-          "Couldn't analyze this image",
-          err instanceof Error ? err.message : "Please try a clearer photo.",
-        );
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Please try a clearer photo with better lighting.";
+        Alert.alert("Couldn't analyze this image", msg);
       },
     },
   });
 
-  async function pickFromCamera() {
-    if (Platform.OS !== "web") {
-      Haptics.selectionAsync();
+  function handleAsset(asset: ImagePicker.ImagePickerAsset) {
+    if (!asset.base64) {
+      Alert.alert("Image error", "Could not read this image. Please try another one.");
+      return;
     }
+    // Expo always encodes base64 as JPEG, regardless of the original format (HEIC etc.)
+    setPreview({ uri: asset.uri, base64: asset.base64, mimeType: "image/jpeg" });
+  }
+
+  async function pickFromCamera() {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) {
       Alert.alert(
@@ -85,36 +110,27 @@ export default function ScanScreen() {
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
+      // eslint-disable-next-line deprecation/deprecation
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       base64: true,
+      allowsEditing: sourceType === "receipt",
+      aspect: sourceType === "receipt" ? ([3, 4] as [number, number]) : undefined,
       quality: 0.7,
-      allowsEditing: false,
     });
-    handleResult(result);
+    if (!result.canceled) handleAsset(result.assets[0]);
   }
 
   async function pickFromLibrary() {
-    if (Platform.OS !== "web") {
-      Haptics.selectionAsync();
-    }
+    if (Platform.OS !== "web") Haptics.selectionAsync();
     const result = await ImagePicker.launchImageLibraryAsync({
+      // eslint-disable-next-line deprecation/deprecation
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       base64: true,
+      allowsEditing: sourceType === "receipt",
+      aspect: sourceType === "receipt" ? ([3, 4] as [number, number]) : undefined,
       quality: 0.7,
-      allowsEditing: false,
     });
-    handleResult(result);
-  }
-
-  function handleResult(result: ImagePicker.ImagePickerResult) {
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    if (!asset.base64) {
-      Alert.alert("Image error", "Could not read this image. Try another one.");
-      return;
-    }
-    const mimeType = asset.mimeType ?? guessMime(asset.uri);
-    setPreview({ uri: asset.uri, base64: asset.base64, mimeType });
+    if (!result.canceled) handleAsset(result.assets[0]);
   }
 
   function submit() {
@@ -127,6 +143,7 @@ export default function ScanScreen() {
         imageBase64: preview.base64,
         mimeType: preview.mimeType,
         sourceType,
+        scannedAt: localCalendarDateYyyyMmDd(),
       },
     });
   }
@@ -149,10 +166,11 @@ export default function ScanScreen() {
         Snap a photo and we'll detect every item.
       </Text>
 
+      {/* ── Source type chips ── */}
       <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
         WHAT ARE YOU SCANNING?
       </Text>
-      <View style={{ gap: 10, marginBottom: 24 }}>
+      <View style={styles.chipRow}>
         {SOURCE_OPTIONS.map((opt) => {
           const active = sourceType === opt.key;
           return (
@@ -160,50 +178,53 @@ export default function ScanScreen() {
               key={opt.key}
               onPress={() => setSourceType(opt.key)}
               style={[
-                styles.sourceRow,
+                styles.chip,
                 {
-                  backgroundColor: active ? `${colors.primary}10` : colors.card,
+                  backgroundColor: active
+                    ? colors.primary
+                    : colors.card,
                   borderColor: active ? colors.primary : colors.border,
                 },
               ]}
             >
-              <View
+              <Feather
+                name={opt.icon}
+                size={14}
+                color={active ? colors.primaryForeground : colors.mutedForeground}
+              />
+              <Text
                 style={[
-                  styles.sourceIcon,
+                  styles.chipLabel,
                   {
-                    backgroundColor: active
-                      ? colors.primary
-                      : `${colors.primary}15`,
+                    color: active
+                      ? colors.primaryForeground
+                      : colors.foreground,
                   },
                 ]}
               >
-                <Feather
-                  name={opt.icon}
-                  size={18}
-                  color={active ? colors.primaryForeground : colors.primary}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.sourceLabel, { color: colors.foreground }]}>
-                  {opt.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.sourceDesc,
-                    { color: colors.mutedForeground },
-                  ]}
-                >
-                  {opt.description}
-                </Text>
-              </View>
-              {active ? (
-                <Feather name="check-circle" size={20} color={colors.primary} />
-              ) : null}
+                {opt.label}
+              </Text>
             </Pressable>
           );
         })}
       </View>
 
+      {/* ── Tip card ── */}
+      {currentTip ? (
+        <View
+          style={[
+            styles.tipCard,
+            { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}30` },
+          ]}
+        >
+          <Feather name="info" size={14} color={colors.primary} />
+          <Text style={[styles.tipText, { color: colors.primary }]}>
+            {currentTip}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* ── Photo zone ── */}
       {preview ? (
         <View
           style={[
@@ -221,9 +242,7 @@ export default function ScanScreen() {
               ]}
             >
               <ActivityIndicator color="#fff" size="large" />
-              <Text style={styles.overlayText}>
-                Reading items from your photo...
-              </Text>
+              <Text style={styles.overlayText}>Reading items from your photo…</Text>
             </View>
           ) : (
             <Pressable
@@ -253,11 +272,12 @@ export default function ScanScreen() {
             Add a photo
           </Text>
           <Text style={[styles.dropSub, { color: colors.mutedForeground }]}>
-            Use your camera or pick from your photo library.
+            Use your camera or pick from your library.
           </Text>
         </View>
       )}
 
+      {/* ── Action buttons ── */}
       <View style={{ gap: 10, marginTop: 16 }}>
         {preview ? (
           <PrimaryButton
@@ -289,13 +309,9 @@ export default function ScanScreen() {
         )}
       </View>
 
-      <View
-        style={[
-          styles.divider,
-          { backgroundColor: colors.border },
-        ]}
-      />
+      <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
+      {/* ── Barcode option ── */}
       <Pressable
         onPress={() => router.push("/barcode-scan")}
         style={({ pressed }) => [
@@ -329,14 +345,6 @@ export default function ScanScreen() {
   );
 }
 
-function guessMime(uri: string): string {
-  const lower = uri.toLowerCase();
-  if (lower.endsWith(".png")) return "image/png";
-  if (lower.endsWith(".webp")) return "image/webp";
-  if (lower.endsWith(".heic")) return "image/heic";
-  return "image/jpeg";
-}
-
 const styles = StyleSheet.create({
   title: {
     fontFamily: "Inter_700Bold",
@@ -355,29 +363,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     marginBottom: 10,
   },
-  sourceRow: {
+  chipRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+  chip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    padding: 14,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 999,
     borderWidth: 1,
-    borderRadius: 16,
   },
-  sourceIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  sourceLabel: {
+  chipLabel: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
+    fontSize: 13,
   },
-  sourceDesc: {
+  tipCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 20,
+  },
+  tipText: {
+    flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    marginTop: 2,
+    lineHeight: 17,
   },
   dropZone: {
     borderWidth: 1,

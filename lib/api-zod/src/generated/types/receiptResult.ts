@@ -10,4 +10,6 @@ export interface ReceiptResult {
   items: ExtractedItem[];
   storeName?: string;
   purchaseDate?: string;
+  /** True when purchaseDate was derived from scannedAt (no date on receipt). */
+  purchaseDateIsEstimated?: boolean;
 }

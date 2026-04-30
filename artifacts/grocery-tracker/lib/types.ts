@@ -1,5 +1,6 @@
 export type Category =
-  | "Produce"
+  | "Fruit"
+  | "Vegetables"
   | "Dairy"
   | "Meat"
   | "Pantry"
@@ -9,10 +10,12 @@ export type Category =
   | "Snacks"
   | "Household"
   | "Personal Care"
+  | "Prepared"
   | "Other";
 
 export const CATEGORIES: Category[] = [
-  "Produce",
+  "Fruit",
+  "Vegetables",
   "Dairy",
   "Meat",
   "Pantry",
@@ -22,6 +25,7 @@ export const CATEGORIES: Category[] = [
   "Snacks",
   "Household",
   "Personal Care",
+  "Prepared",
   "Other",
 ];
 

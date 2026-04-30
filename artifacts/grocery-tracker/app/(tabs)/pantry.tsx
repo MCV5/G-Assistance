@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { AddItemModal } from "@/components/AddItemModal";
 import { EmptyState } from "@/components/EmptyState";
 import { ItemRow } from "@/components/ItemRow";
 import { usePantry } from "@/contexts/PantryContext";
@@ -30,9 +31,10 @@ const FILTERS: { key: Filter; label: string }[] = [
 export default function PantryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { pantry, markConsumed, unmarkConsumed, removeItem } = usePantry();
+  const { pantry, markConsumed, unmarkConsumed, removeItem, addManualPantryItem } = usePantry();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [addOpen, setAddOpen] = useState(false);
 
   const filtered = useMemo<PantryItem[]>(() => {
     let list = pantry.slice();
@@ -61,8 +63,26 @@ export default function PantryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      <AddItemModal
+        visible={addOpen}
+        title="Add to pantry"
+        submitLabel="Add to pantry"
+        onClose={() => setAddOpen(false)}
+        onSubmit={(name, category) => {
+          addManualPantryItem(name, category);
+          setAddOpen(false);
+        }}
+      />
       <View style={{ paddingTop: topPad, paddingHorizontal: 20 }}>
-        <Text style={[styles.title, { color: colors.foreground }]}>Pantry</Text>
+        <View style={styles.headerRow}>
+          <Text style={[styles.title, { color: colors.foreground }]}>Pantry</Text>
+          <Pressable
+            onPress={() => setAddOpen(true)}
+            style={[styles.addBtn, { backgroundColor: colors.primary }]}
+          >
+            <Feather name="plus" size={20} color={colors.primaryForeground} />
+          </Pressable>
+        </View>
         <View
           style={[
             styles.searchBox,
@@ -162,12 +182,12 @@ export default function PantryScreen() {
             icon="package"
             title={
               pantry.length === 0
-                ? "Nothing tracked yet"
+                ? "Your pantry is empty"
                 : "No matches"
             }
             subtitle={
               pantry.length === 0
-                ? "Scan a receipt or bag to start filling your pantry."
+                ? "Scan a receipt or tap + to add items manually."
                 : "Try a different filter or search term."
             }
           />
@@ -178,11 +198,23 @@ export default function PantryScreen() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
     letterSpacing: -0.5,
-    marginBottom: 16,
+  },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
   },
   searchBox: {
     flexDirection: "row",

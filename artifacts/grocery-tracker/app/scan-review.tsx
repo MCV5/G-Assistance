@@ -1,7 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -21,13 +21,35 @@ import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
+import { coerceCategory } from "@/lib/guessCategory";
 import { CATEGORIES, type Category, type ScanSource } from "@/lib/types";
+
+function localCalendarDateYyyyMmDd(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function resolvePurchaseDateInput(
+  raw: string,
+  fallback: string,
+): { ok: true; value: string } | { ok: false } {
+  const t = raw.trim();
+  if (t === "") return { ok: true, value: fallback };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return { ok: false };
+  const ms = Date.parse(`${t}T12:00:00`);
+  if (Number.isNaN(ms)) return { ok: false };
+  return { ok: true, value: t };
+}
 
 interface ScanPayload {
   items: ExtractedItem[];
   sourceType: ScanSource;
   storeName?: string;
   purchaseDate?: string;
+  /** From analyze API when purchase date was inferred from scan date. */
+  purchaseDateIsEstimated?: boolean;
   fromBarcode?: boolean;
   notFound?: boolean;
   barcode?: string;
@@ -40,13 +62,21 @@ export default function ScanReviewScreen() {
 
   const initial = useMemo<ScanPayload>(() => {
     try {
-      return JSON.parse(decodeURIComponent(params.data ?? "")) as ScanPayload;
+      const p = JSON.parse(decodeURIComponent(params.data ?? "")) as ScanPayload;
+      const items = (p.items ?? []).map((it) => ({
+        ...it,
+        category: coerceCategory(it.name, it.category),
+      }));
+      return { ...p, items };
     } catch {
       return { items: [], sourceType: "receipt" };
     }
   }, [params.data]);
 
-  const [items, setItems] = useState<ExtractedItem[]>(initial.items ?? []);
+  const [items, setItems] = useState<ExtractedItem[]>(() => initial.items ?? []);
+  const [purchaseDate, setPurchaseDate] = useState(
+    () => initial.purchaseDate ?? "",
+  );
   const [editing, setEditing] = useState<{ index: number; item: ExtractedItem } | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -63,13 +93,20 @@ export default function ScanReviewScreen() {
       router.back();
       return;
     }
+    const fallback =
+      initial.purchaseDate?.trim() || localCalendarDateYyyyMmDd();
+    const resolved = resolvePurchaseDateInput(purchaseDate, fallback);
+    if (!resolved.ok) {
+      Alert.alert("Invalid date", "Use YYYY-MM-DD, or leave blank to use the suggested date.");
+      return;
+    }
     setSaving(true);
     try {
       await addScannedItems(
         items,
         initial.sourceType,
         initial.storeName,
-        initial.purchaseDate,
+        resolved.value,
       );
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -109,6 +146,49 @@ export default function ScanReviewScreen() {
                   ? `From ${initial.storeName}. Tap any item to edit. Long-press to remove.`
                   : "Tap any item to edit. Long-press to remove."}
             </Text>
+            {!initial.fromBarcode && initial.purchaseDateIsEstimated ? (
+              <View
+                style={[
+                  styles.estimatedBanner,
+                  {
+                    backgroundColor: `${colors.primary}14`,
+                    borderColor: `${colors.primary}40`,
+                  },
+                ]}
+              >
+                <Feather name="calendar" size={16} color={colors.primary} />
+                <Text style={[styles.estimatedBannerText, { color: colors.foreground }]}>
+                  Purchase date was not on the receipt — we used your scan date. Adjust
+                  below if needed.
+                </Text>
+              </View>
+            ) : null}
+            {!initial.fromBarcode ? (
+              <View style={{ marginTop: 14 }}>
+                <Text style={[styles.modalLabel, { color: colors.mutedForeground }]}>
+                  PURCHASE DATE (YYYY-MM-DD)
+                </Text>
+                <TextInput
+                  value={purchaseDate}
+                  onChangeText={setPurchaseDate}
+                  placeholder={
+                    initial.purchaseDate ?? localCalendarDateYyyyMmDd()
+                  }
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={[
+                    styles.input,
+                    styles.purchaseDateInput,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      color: colors.foreground,
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
           </View>
         }
         renderItem={({ item, index }) => (
@@ -133,7 +213,10 @@ export default function ScanReviewScreen() {
               },
             ]}
           >
-            <CategoryIcon category={item.category as Category} size={42} />
+            <CategoryIcon
+              category={coerceCategory(item.name, item.category)}
+              size={42}
+            />
             <View style={{ flex: 1 }}>
               <Text style={[styles.itemName, { color: colors.foreground }]}>
                 {item.name}
@@ -200,17 +283,16 @@ function EditItemModal({
   const [name, setName] = useState(item?.name ?? "");
   const [qty, setQty] = useState(String(item?.quantity ?? 1));
   const [unit, setUnit] = useState(item?.unit ?? "piece");
-  const [category, setCategory] = useState<Category>(
-    (item?.category as Category) ?? "Other",
+  const [category, setCategory] = useState<Category>(() =>
+    item ? coerceCategory(item.name, item.category) : "Other",
   );
 
-  // Reset state when item changes
-  useMemo(() => {
+  useEffect(() => {
     if (item) {
       setName(item.name);
       setQty(String(item.quantity));
       setUnit(item.unit);
-      setCategory(item.category as Category);
+      setCategory(coerceCategory(item.name, item.category));
     }
   }, [item]);
 
@@ -427,5 +509,23 @@ const styles = StyleSheet.create({
   catChipText: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
+  },
+  estimatedBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    marginTop: 14,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  estimatedBannerText: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  purchaseDateInput: {
+    marginTop: 4,
   },
 });

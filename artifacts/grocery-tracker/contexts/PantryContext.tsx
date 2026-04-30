@@ -14,6 +14,7 @@ import {
   computeAverageDaysBetweenPurchases,
   isPredictedNeeded,
 } from "@/lib/predictions";
+import { coerceCategory } from "@/lib/guessCategory";
 import { loadStore, newId, saveStore, type StoreSnapshot } from "@/lib/storage";
 import type {
   Category,
@@ -38,6 +39,7 @@ interface PantryContextValue {
   unmarkConsumed: (id: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   refreshPredictions: () => Promise<void>;
+  addManualPantryItem: (name: string, category: Category) => Promise<void>;
   addManualShoppingItem: (name: string, category: Category) => Promise<void>;
   toggleShoppingItem: (id: string) => Promise<void>;
   removeShoppingItem: (id: string) => Promise<void>;
@@ -173,6 +175,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       const next: PantryItem[] = [...pantry];
 
       for (const incoming of items) {
+        const cat = coerceCategory(incoming.name, incoming.category);
         const lowerName = incoming.name.trim().toLowerCase();
         const existingIdx = next.findIndex(
           (p) => p.name.trim().toLowerCase() === lowerName,
@@ -191,7 +194,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             ...existing,
             quantity: existing.quantity + incoming.quantity,
             unit: incoming.unit || existing.unit,
-            category: incoming.category as Category,
+            category: cat,
             estimatedShelfLifeDays:
               incoming.estimatedShelfLifeDays || existing.estimatedShelfLifeDays,
             lastPurchasedAt: purchaseDateIso,
@@ -210,7 +213,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
           next.push({
             id: newId(),
             name: incoming.name.trim(),
-            category: incoming.category as Category,
+            category: cat,
             quantity: incoming.quantity,
             unit: incoming.unit,
             estimatedShelfLifeDays: incoming.estimatedShelfLifeDays,
@@ -275,6 +278,48 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     await persistShopping(refreshed);
   }, [pantry, persistShopping, shoppingList]);
 
+  const addManualPantryItem = useCallback(
+    async (name: string, category: Category) => {
+      const now = new Date().toISOString();
+      const existing = pantry.find(
+        (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (existing) {
+        const next = pantry.map((p) =>
+          p.id === existing.id
+            ? {
+                ...p,
+                quantity: p.quantity + 1,
+                lastPurchasedAt: now,
+                purchases: [
+                  ...p.purchases,
+                  { date: now, quantity: 1, unit: p.unit || "unit", source: "manual" as const },
+                ],
+                consumed: false,
+              }
+            : p,
+        );
+        await persistPantry(next);
+      } else {
+        const item: PantryItem = {
+          id: newId(),
+          name: name.trim(),
+          category,
+          quantity: 1,
+          unit: "unit",
+          estimatedShelfLifeDays: 7,
+          firstSeenAt: now,
+          lastPurchasedAt: now,
+          purchases: [{ date: now, quantity: 1, unit: "unit", source: "manual" }],
+          averageDaysBetweenPurchases: null,
+          consumed: false,
+        };
+        await persistPantry([...pantry, item]);
+      }
+    },
+    [pantry, persistPantry],
+  );
+
   const addManualShoppingItem = useCallback(
     async (name: string, category: Category) => {
       const item: ShoppingListItem = {
@@ -329,6 +374,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       unmarkConsumed,
       removeItem,
       refreshPredictions,
+      addManualPantryItem,
       addManualShoppingItem,
       toggleShoppingItem,
       removeShoppingItem,
@@ -345,6 +391,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       unmarkConsumed,
       removeItem,
       refreshPredictions,
+      addManualPantryItem,
       addManualShoppingItem,
       toggleShoppingItem,
       removeShoppingItem,

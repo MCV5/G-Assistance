@@ -23,8 +23,11 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 
 SplashScreen.preventAutoHideAsync();
 
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+const _apiBase =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : null);
+if (_apiBase) {
+  setBaseUrl(_apiBase);
 }
 
 setAuthTokenGetter(async () => {
@@ -57,6 +60,20 @@ function RootLayoutNav() {
         options={{
           presentation: "fullScreenModal",
           headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="activity"
+        options={{
+          title: "Shopping activity",
+          headerShown: true,
+        }}
+      />
+      <Stack.Screen
+        name="profile"
+        options={{
+          title: "Profile",
+          headerShown: true,
         }}
       />
     </Stack>

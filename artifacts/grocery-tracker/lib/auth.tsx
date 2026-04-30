@@ -18,9 +18,9 @@ import {
 } from "@workspace/api-client-react";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
-const API_BASE_URL = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "";
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : "");
 
 async function postPublicAuthJson<T>(
   path: string,

@@ -1,69 +1,87 @@
 const colors = {
   light: {
-    text: "#1a2419",
-    tint: "#2f6d3f",
+    text: "#1A1A18",
+    tint: "#3A5C26",
 
-    background: "#fbf8f1",
-    foreground: "#1a2419",
+    background: "#F2EFE6",
+    foreground: "#1A1A18",
 
-    card: "#ffffff",
-    cardForeground: "#1a2419",
+    card: "#E8E4D9",
+    cardForeground: "#1A1A18",
 
-    primary: "#2f6d3f",
-    primaryForeground: "#ffffff",
+    primary: "#2D4A1E",
+    primaryForeground: "#F2EFE6",
 
-    secondary: "#eef2e6",
-    secondaryForeground: "#1a2419",
+    secondary: "#E8E4D9",
+    secondaryForeground: "#1A1A18",
 
-    muted: "#f1ede1",
-    mutedForeground: "#6b7261",
+    muted: "#D8D4CA",
+    mutedForeground: "#8A8780",
 
-    accent: "#e7c66b",
-    accentForeground: "#1a2419",
+    accent: "#7AAD52",
+    accentForeground: "#1A1A18",
 
-    destructive: "#c8553d",
-    destructiveForeground: "#ffffff",
+    destructive: "#3A1A00",
+    destructiveForeground: "#F2EFE6",
 
-    border: "#e6e1d2",
-    input: "#e6e1d2",
+    border: "#D8D4CA",
+    input: "#D8D4CA",
 
-    success: "#2f6d3f",
-    warning: "#d28a1f",
+    success: "#3A5C26",
+    warning: "#E8A040",
   },
 
   dark: {
-    text: "#f1ede1",
-    tint: "#a3d9b1",
+    // Keep dark identical to light so the app always matches
+    // the same home-style palette regardless of device theme.
+    text: "#1A1A18",
+    tint: "#3A5C26",
 
-    background: "#13180f",
-    foreground: "#f1ede1",
+    background: "#F2EFE6",
+    foreground: "#1A1A18",
 
-    card: "#1c2417",
-    cardForeground: "#f1ede1",
+    card: "#E8E4D9",
+    cardForeground: "#1A1A18",
 
-    primary: "#a3d9b1",
-    primaryForeground: "#13180f",
+    primary: "#2D4A1E",
+    primaryForeground: "#F2EFE6",
 
-    secondary: "#262e1f",
-    secondaryForeground: "#f1ede1",
+    secondary: "#E8E4D9",
+    secondaryForeground: "#1A1A18",
 
-    muted: "#262e1f",
-    mutedForeground: "#9aa192",
+    muted: "#D8D4CA",
+    mutedForeground: "#8A8780",
 
-    accent: "#e7c66b",
-    accentForeground: "#13180f",
+    accent: "#7AAD52",
+    accentForeground: "#1A1A18",
 
-    destructive: "#e07a5f",
-    destructiveForeground: "#13180f",
+    destructive: "#3A1A00",
+    destructiveForeground: "#F2EFE6",
 
-    border: "#2a3122",
-    input: "#2a3122",
+    border: "#D8D4CA",
+    input: "#D8D4CA",
 
-    success: "#a3d9b1",
-    warning: "#e7c66b",
+    success: "#3A5C26",
+    warning: "#E8A040",
   },
 
   radius: 14,
 };
 
 export default colors;
+
+// Bold typographic / dark-forest design tokens
+// Shared by login.tsx and onboarding.tsx
+export const boldTheme = {
+  greenDark:   "#1C2E0A",
+  greenMid:    "#2D4A1E",
+  greenLight:  "#C5DCA8",
+  cream:       "#F2EFE6",
+  creamDark:   "#E8E4D9",
+  creamBorder: "#D8D4CA",
+  inkBlack:    "#1A1A18",
+  inkMid:      "#5A5750",
+  inkLight:    "#8A8780",
+  amber:       "#E8A040",
+  amberBg:     "#3A1A00",
+};

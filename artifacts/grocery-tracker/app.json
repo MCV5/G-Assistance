@@ -18,7 +18,8 @@
       "bundleIdentifier": "com.gassistant.app"
     },
     "android": {
-      "package": "com.gassistant.app"
+      "package": "com.gassistant.app",
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/images/icon.png"

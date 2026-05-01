@@ -17,16 +17,41 @@ import {
   type AuthUser,
 } from "@workspace/api-client-react";
 
+import { getApiBaseUrl } from "@/lib/apiBase";
+
 const AUTH_TOKEN_KEY = "auth_session_token";
-const API_BASE_URL = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : "";
+const AUTH_BOOT_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("Auth bootstrap timed out."));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 async function postPublicAuthJson<T>(
   path: string,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const base = getApiBaseUrl();
+  if (!base) {
+    throw new Error(
+      "API is not configured. Set EXPO_PUBLIC_API_URL, or run the app in development with the API server (pnpm dev:api) on the default port.",
+    );
+  }
+  const response = await fetch(`${base}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -104,7 +129,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         return;
       }
-      const data = await getCurrentAuthUser();
+      const data = await withTimeout(getCurrentAuthUser(), AUTH_BOOT_TIMEOUT_MS);
       if (data?.user) {
         setUser(data.user);
       } else {
@@ -112,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
       }
     } catch {
+      await clearToken();
       setUser(null);
     }
   }, []);

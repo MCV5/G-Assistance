@@ -1,5 +1,6 @@
 export type Category =
-  | "Produce"
+  | "Fruit"
+  | "Vegetables"
   | "Dairy"
   | "Meat"
   | "Pantry"
@@ -9,10 +10,12 @@ export type Category =
   | "Snacks"
   | "Household"
   | "Personal Care"
+  | "Prepared"
   | "Other";
 
 export const CATEGORIES: Category[] = [
-  "Produce",
+  "Fruit",
+  "Vegetables",
   "Dairy",
   "Meat",
   "Pantry",
@@ -22,6 +25,7 @@ export const CATEGORIES: Category[] = [
   "Snacks",
   "Household",
   "Personal Care",
+  "Prepared",
   "Other",
 ];
 
@@ -38,6 +42,9 @@ export interface PantryItem {
   id: string;
   name: string;
   category: Category;
+  isOrganic?: boolean;
+  organicConfidence?: number;
+  organicSource?: "label" | "name_keyword" | "manual";
   quantity: number;
   unit: string;
   estimatedShelfLifeDays: number;
@@ -46,6 +53,9 @@ export interface PantryItem {
   purchases: Purchase[];
   averageDaysBetweenPurchases: number | null;
   consumed: boolean;
+  wasWasted?: boolean;
+  wastedAt?: string;
+  purchaseCount?: number;
 }
 
 export interface ScanRecord {

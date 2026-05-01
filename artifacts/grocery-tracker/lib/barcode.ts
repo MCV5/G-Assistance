@@ -17,8 +17,10 @@ interface OpenFoodFactsResponse {
 
 const CATEGORY_KEYWORDS: { category: Category; words: string[]; shelfDays: number }[] = [
   { category: "Dairy", words: ["dairy", "milk", "cheese", "yogurt", "yoghurt", "butter", "cream"], shelfDays: 10 },
-  { category: "Produce", words: ["fruit", "vegetable", "produce", "fresh"], shelfDays: 7 },
-  { category: "Meat", words: ["meat", "beef", "pork", "chicken", "poultry", "fish", "seafood", "sausage"], shelfDays: 4 },
+  { category: "Fruit", words: ["fruit", "berries", "citrus", "bananas"], shelfDays: 7 },
+  { category: "Vegetables", words: ["vegetable", "produce", "greens", "salad"], shelfDays: 7 },
+  { category: "Prepared", words: ["prepared", "deli", "meal", "ready-to-eat", "rotisserie"], shelfDays: 6 },
+  { category: "Meat", words: ["meat", "beef", "pork", "chicken", "poultry", "fish", "seafood", "sausage"], shelfDays: 6 },
   { category: "Bakery", words: ["bread", "bakery", "pastr", "baguette", "bagel", "tortilla"], shelfDays: 7 },
   { category: "Beverages", words: ["beverag", "drink", "juice", "soda", "coffee", "tea", "water"], shelfDays: 60 },
   { category: "Frozen", words: ["frozen"], shelfDays: 120 },

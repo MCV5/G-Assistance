@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "export NODE_ENV=development && pnpm run build && pnpm run start",
+    "dev:local": "pnpm run build && pnpm run start:local",
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
+    "start:local": "node --require dotenv/config --enable-source-maps -e \"process.env.PORT = '3001'; import('./dist/index.mjs');\" dotenv_config_path=../../.env",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -17,6 +19,7 @@
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
+    "dotenv": "^17.4.2",
     "drizzle-orm": "catalog:",
     "express": "^5",
     "nodemailer": "^6.10.1",

@@ -63,6 +63,7 @@ export function getStatusLabel(status: ItemStatus): string {
 }
 
 export function isPredictedNeeded(item: PantryItem): boolean {
+  if (item.consumed) return false;
   const status = getItemStatus(item);
   return (
     status === "due" ||

@@ -47,6 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.replit
+.replitignore
+
+# Cursor agent internals
+.agents/
 
 # Environment secrets — never commit these
 .env

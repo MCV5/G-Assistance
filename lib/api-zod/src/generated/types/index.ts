@@ -12,6 +12,7 @@ export * from "./authUser";
 export * from "./authUserEnvelope";
 export * from "./errorEnvelope";
 export * from "./extractedItem";
+export * from "./extractedItemOrganicSource";
 export * from "./healthStatus";
 export * from "./loginRequest";
 export * from "./logoutSuccess";

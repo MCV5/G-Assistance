@@ -16,21 +16,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { boldTheme as D } from "@/constants/colors";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
-
-// Design tokens — bold typographic / dark-forest theme
-const D = {
-  greenDark:   "#1C3A0A",
-  greenMid:    "#2D5016",
-  greenLight:  "#A8C97F",
-  cream:       "#F5F1E8",
-  creamDark:   "#EDEAE0",
-  creamBorder: "#C8C4BA",
-  inkBlack:    "#1A1A1A",
-  inkMid:      "#5A5750",
-  inkLight:    "#9E9B96",
-};
 
 type Mode = "login" | "signup";
 
@@ -115,29 +103,23 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={[s.body, { width: maxW }]}>
-          {/* Eyebrow */}
-          <Text style={s.eyebrow}>GROCERY TRACKER</Text>
+          {/* Back to onboarding */}
+          <Pressable
+            style={s.backBtn}
+            onPress={() => router.push("/onboarding")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={s.backArrow}>←</Text>
+            <Text style={s.backTxt}>How it works</Text>
+          </Pressable>
 
-          {/* Hero headline */}
-          <Text style={s.headline}>
-            {"TRACK\n"}
-            <Text style={s.headlineAccent}>SMARTER.</Text>
-          </Text>
-
-          <View style={s.divider} />
-
-          {/* How it works — compact step boxes */}
-          <View style={s.stepsRow}>
-            {([
-              ["01", "SNAP"],
-              ["02", "SORT"],
-              ["03", "RESTOCK"],
-            ] as const).map(([num, word]) => (
-              <View key={num} style={s.stepBox}>
-                <Text style={s.stepNum}>{num}</Text>
-                <Text style={s.stepWord}>{word}</Text>
-              </View>
-            ))}
+          {/* Brand header */}
+          <View style={s.header}>
+            <Text style={s.eyebrow}>GROCERY TRACKER</Text>
+            <Text style={s.headline}>
+              {"TRACK "}
+              <Text style={s.headlineAccent}>SMARTER.</Text>
+            </Text>
           </View>
 
           <View style={s.divider} />
@@ -280,38 +262,39 @@ const s = StyleSheet.create({
     color: D.greenMid,
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: D.creamBorder,
-    marginVertical: 18,
-  },
-
-  stepsRow: {
+  backBtn: {
     flexDirection: "row",
-    gap: 8,
-  },
-  stepBox: {
-    flex: 1,
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 20,
+    alignSelf: "flex-start",
     backgroundColor: D.creamDark,
     borderWidth: 1,
     borderColor: D.creamBorder,
     borderRadius: 6,
-    paddingVertical: 10,
-    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  stepNum: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 20,
-    color: D.greenMid,
-    lineHeight: 22,
-  },
-  stepWord: {
+  backArrow: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 8,
+    fontSize: 14,
+    color: D.greenMid,
+    lineHeight: 18,
+  },
+  backTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11,
     color: D.inkMid,
-    letterSpacing: 1,
-    marginTop: 2,
-    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  header: {
+    marginBottom: 4,
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: D.creamBorder,
+    marginVertical: 18,
   },
 
   tabs: {

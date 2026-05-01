@@ -3,29 +3,20 @@ import { useRouter } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
   Animated,
-  FlatList,
-  Platform,
+  Dimensions,
+  Pressable,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const D = {
-  greenDark:   "#1C3A0A",
-  greenMid:    "#2D5016",
-  greenLight:  "#A8C97F",
-  cream:       "#F5F1E8",
-  creamDark:   "#EDEAE0",
-  creamBorder: "#C8C4BA",
-  inkBlack:    "#1A1A1A",
-  inkMid:      "#5A5750",
-  amber:       "#E8A040",
-};
+import { boldTheme as D } from "@/constants/colors";
 
+// ─── Slide data ────────────────────────────────────────────────────────────────
 const SLIDES = [
   {
     id: "1",
@@ -33,7 +24,7 @@ const SLIDES = [
     badge: "SCAN",
     headline: "SNAP YOUR\n",
     accent: "RECEIPT.",
-    body: "Point your camera at any receipt or grocery bag. We detect every item in seconds — no typing needed.",
+    body: "Point your camera at any receipt or grocery bag. Every item is detected in seconds — no typing.",
     visual: "scan",
   },
   {
@@ -42,7 +33,7 @@ const SLIDES = [
     badge: "TRACK",
     headline: "KNOW WHAT\nYOU ",
     accent: "HAVE.",
-    body: "Your pantry updates automatically. See stock levels, categories, and what's running low — all in one place.",
+    body: "Your pantry updates automatically. See what's running low, categorized and ready to act on.",
     visual: "pantry",
   },
   {
@@ -56,7 +47,7 @@ const SLIDES = [
   },
 ] as const;
 
-// ─── Visual components inside the dark-green area ─────────────────────────────
+// ─── Visual panel components ──────────────────────────────────────────────────
 
 function GridLines() {
   return (
@@ -80,16 +71,14 @@ function GridLines() {
   );
 }
 
-function DataCard({
-  label, value, sub, chip, style,
-}: {
+function DataCard({ label, value, sub, chip, style }: {
   label: string; value: string; sub?: string; chip?: string; style?: object;
 }) {
   return (
     <View style={[vc.card, style]}>
-      <Text style={vc.label}>{label}</Text>
-      <Text style={vc.value}>{value}</Text>
-      {sub  ? <Text style={vc.sub}>{sub}</Text> : null}
+      <Text style={vc.cardLabel}>{label}</Text>
+      <Text style={vc.cardValue}>{value}</Text>
+      {sub  ? <Text style={vc.cardSub}>{sub}</Text> : null}
       {chip ? (
         <View style={vc.chip}><Text style={vc.chipTxt}>{chip}</Text></View>
       ) : null}
@@ -97,7 +86,7 @@ function DataCard({
   );
 }
 
-function ScanVisual() {
+function ScanPanel() {
   return (
     <View style={{ flex: 1 }}>
       <GridLines />
@@ -106,12 +95,12 @@ function ScanVisual() {
       <DataCard label="PANTRY STATUS" value="94% full" chip="↑ UPDATED"
         style={{ position: "absolute", bottom: 22, right: 18 }} />
       <DataCard label="RESTOCK IN" value="3 days"
-        style={{ position: "absolute", top: 80, right: 24 }} />
+        style={{ position: "absolute", top: 90, right: 24 }} />
     </View>
   );
 }
 
-function PantryVisual({ width }: { width: number }) {
+function PantryPanel({ width }: { width: number }) {
   const items = [
     { name: "Olive oil", pct: 72, warn: false },
     { name: "Pasta",     pct: 30, warn: true  },
@@ -123,23 +112,17 @@ function PantryVisual({ width }: { width: number }) {
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
       <GridLines />
       <View style={[vc.card, { width: cardW, marginBottom: 10 }]}>
-        <Text style={vc.label}>PANTRY</Text>
+        <Text style={vc.cardLabel}>PANTRY</Text>
         {items.map((item) => (
           <View key={item.name} style={vc.pantryRow}>
-            <Text style={[vc.pantryName, item.warn && { color: D.amber }]}>
-              {item.name}
-            </Text>
+            <Text style={[vc.pantryName, item.warn && { color: D.amber }]}>{item.name}</Text>
             <View style={vc.barTrack}>
-              <View
-                style={[
-                  vc.barFill,
-                  { width: `${item.pct}%`, backgroundColor: item.warn ? D.amber : D.greenLight },
-                ]}
-              />
+              <View style={[vc.barFill, {
+                width: `${item.pct}%`,
+                backgroundColor: item.warn ? D.amber : D.greenLight,
+              }]} />
             </View>
-            <Text style={[vc.pantryPct, item.warn && { color: D.amber }]}>
-              {item.pct}%
-            </Text>
+            <Text style={[vc.pantryPct, item.warn && { color: D.amber }]}>{item.pct}%</Text>
           </View>
         ))}
       </View>
@@ -149,9 +132,10 @@ function PantryVisual({ width }: { width: number }) {
           { lbl: "CATS",  val: "8",  warn: false },
           { lbl: "LOW",   val: "2",  warn: true  },
         ].map((b) => (
-          <View key={b.lbl} style={[vc.card, { flex: 1, padding: 8 }, b.warn && { borderColor: "rgba(232,160,64,0.4)" }]}>
-            <Text style={[vc.label, b.warn && { color: "rgba(232,160,64,0.6)" }]}>{b.lbl}</Text>
-            <Text style={[vc.value, { fontSize: 18 }, b.warn && { color: D.amber }]}>{b.val}</Text>
+          <View key={b.lbl} style={[vc.card, { flex: 1, padding: 8 },
+            b.warn && { borderColor: "rgba(232,160,64,0.4)" }]}>
+            <Text style={[vc.cardLabel, b.warn && { color: "rgba(232,160,64,0.6)" }]}>{b.lbl}</Text>
+            <Text style={[vc.cardValue, { fontSize: 18 }, b.warn && { color: D.amber }]}>{b.val}</Text>
           </View>
         ))}
       </View>
@@ -159,15 +143,15 @@ function PantryVisual({ width }: { width: number }) {
   );
 }
 
-function RestockVisual() {
+function RestockPanel() {
   return (
     <View style={{ flex: 1 }}>
       <GridLines />
       <View style={[vc.card, { position: "absolute", top: 22, left: 18, right: 18 }]}>
-        <Text style={vc.label}>RESTOCK REMINDERS</Text>
+        <Text style={vc.cardLabel}>RESTOCK REMINDERS</Text>
         {[
-          { name: "Pasta",    days: "Today",    urgent: true  },
-          { name: "Oats",     days: "Tomorrow", urgent: true  },
+          { name: "Pasta",    days: "Today",     urgent: true  },
+          { name: "Oats",     days: "Tomorrow",  urgent: true  },
           { name: "Olive oil", days: "In 4 days", urgent: false },
         ].map((r) => (
           <View key={r.name} style={vc.restockRow}>
@@ -183,62 +167,16 @@ function RestockVisual() {
   );
 }
 
-// ─── Slide ────────────────────────────────────────────────────────────────────
-
-function Slide({
-  item,
-  width,
-  height,
-}: {
-  item: (typeof SLIDES)[number];
-  width: number;
-  height: number;
-}) {
-  return (
-    <View style={{ width, height, backgroundColor: D.cream }}>
-      {/* Top accent stripe */}
-      <View style={{ height: 5, backgroundColor: D.greenMid }} />
-
-      {/* Dark-green visual area */}
-      <View style={{ height: 220, backgroundColor: D.greenMid, overflow: "hidden" }}>
-        {item.visual === "scan"    ? <ScanVisual /> : null}
-        {item.visual === "pantry"  ? <PantryVisual width={width} /> : null}
-        {item.visual === "restock" ? <RestockVisual /> : null}
-      </View>
-
-      {/* Text content */}
-      <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 22 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <Text style={tx.stepNum}>{item.step}</Text>
-          <View style={tx.badge}>
-            <Text style={tx.badgeTxt}>{item.badge}</Text>
-          </View>
-        </View>
-        <Text style={tx.headline}>
-          {item.headline}
-          <Text style={tx.accent}>{item.accent}</Text>
-        </Text>
-        <Text style={tx.body}>{item.body}</Text>
-      </View>
-    </View>
-  );
-}
-
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
-const NAV_H = Platform.OS === "ios" ? 72 : 64;
-
 export default function OnboardingScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
+  const router  = useRouter();
+  const insets  = useSafeAreaInsets();
   const { width: screenW, height: screenH } = useWindowDimensions();
-
-  // Cap width for web/tablet
   const W = Math.min(screenW, 430);
-  const slideH = screenH - NAV_H - insets.bottom - insets.top;
 
-  const listRef = useRef<FlatList>(null);
-  const scrollX = useRef(new Animated.Value(0)).current;
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollX   = useRef(new Animated.Value(0)).current;
   const [index, setIndex] = useState(0);
 
   const finish = async () => {
@@ -248,53 +186,105 @@ export default function OnboardingScreen() {
 
   const goNext = () => {
     if (index < SLIDES.length - 1) {
-      listRef.current?.scrollToIndex({ index: index + 1, animated: true });
+      const next = index + 1;
+      setIndex(next);
+      scrollRef.current?.scrollTo({ x: next * W, animated: true });
     } else {
       finish();
     }
   };
 
+  const isLast = index === SLIDES.length - 1;
+
+  // Dot indicator widths driven by scroll position
+  const VISUAL_H = Math.min(screenH * 0.38, 260);
+
   return (
     <View style={{ flex: 1, backgroundColor: D.cream, alignItems: "center" }}>
       <StatusBar barStyle="dark-content" backgroundColor={D.cream} />
 
-      <FlatList
-        ref={listRef}
-        data={SLIDES}
-        keyExtractor={(item) => item.id}
+      {/* Top stripe */}
+      <View style={{ width: W, height: 5, backgroundColor: D.greenMid }} />
+
+      {/* Full-screen horizontal pager — swipe anywhere */}
+      <Animated.ScrollView
+        ref={scrollRef}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
         style={{ flex: 1, width: W }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
           { useNativeDriver: false },
         )}
         onMomentumScrollEnd={(e) => {
-          setIndex(Math.round(e.nativeEvent.contentOffset.x / W));
+          const newIndex = Math.round(e.nativeEvent.contentOffset.x / W);
+          setIndex(newIndex);
         }}
-        scrollEventThrottle={16}
-        renderItem={({ item }) => (
-          <Slide item={item} width={W} height={slideH} />
-        )}
-      />
+      >
+        {SLIDES.map((slide, i) => {
+          // Each slide's content fades in as it scrolls into view
+          const opacity = scrollX.interpolate({
+            inputRange: [(i - 0.5) * W, i * W, (i + 0.5) * W],
+            outputRange: [0, 1, 0],
+            extrapolate: "clamp",
+          });
+          const translateY = scrollX.interpolate({
+            inputRange: [(i - 1) * W, i * W, (i + 1) * W],
+            outputRange: [16, 0, 16],
+            extrapolate: "clamp",
+          });
+
+          return (
+            <View key={slide.id} style={{ width: W, flex: 1 }}>
+              {/* Dark green visual panel */}
+              <View style={{ height: VISUAL_H, backgroundColor: D.greenMid, overflow: "hidden" }}>
+                {slide.visual === "scan"    ? <ScanPanel /> : null}
+                {slide.visual === "pantry"  ? <PantryPanel width={W} /> : null}
+                {slide.visual === "restock" ? <RestockPanel /> : null}
+              </View>
+
+              {/* Animated text content */}
+              <Animated.View style={[
+                tx.content,
+                { opacity, transform: [{ translateY }] },
+              ]}>
+                {/* Step + badge row */}
+                <View style={tx.stepRow}>
+                  <Text style={tx.stepNum}>{slide.step}</Text>
+                  <View style={tx.badge}>
+                    <Text style={tx.badgeTxt}>{slide.badge}</Text>
+                  </View>
+                </View>
+
+                <Text style={tx.headline}>
+                  {slide.headline}
+                  <Text style={tx.accent}>{slide.accent}</Text>
+                </Text>
+
+                <Text style={tx.body}>{slide.body}</Text>
+
+                {/* Swipe hint on first slide */}
+                {i === 0 && (
+                  <View style={tx.swipeHint}>
+                    <Text style={tx.swipeHintTxt}>← swipe to explore →</Text>
+                  </View>
+                )}
+              </Animated.View>
+            </View>
+          );
+        })}
+      </Animated.ScrollView>
 
       {/* Bottom nav */}
-      <View
-        style={[
-          nav.bar,
-          {
-            width: W,
-            paddingBottom: insets.bottom + 8,
-          },
-        ]}
-      >
-        <TouchableOpacity
+      <View style={[nav.bar, { width: W, paddingBottom: insets.bottom + 10 }]}>
+        <Pressable
           onPress={finish}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <Text style={nav.skip}>SKIP</Text>
-        </TouchableOpacity>
+        </Pressable>
 
         <View style={nav.dots}>
           {SLIDES.map((_, i) => {
@@ -307,12 +297,12 @@ export default function OnboardingScreen() {
                   {
                     width: scrollX.interpolate({
                       inputRange: range,
-                      outputRange: [16, 28, 16],
+                      outputRange: [8, 24, 8],
                       extrapolate: "clamp",
                     }),
                     opacity: scrollX.interpolate({
                       inputRange: range,
-                      outputRange: [0.3, 1, 0.3],
+                      outputRange: [0.35, 1, 0.35],
                       extrapolate: "clamp",
                     }),
                   },
@@ -322,9 +312,12 @@ export default function OnboardingScreen() {
           })}
         </View>
 
-        <TouchableOpacity style={nav.nextBtn} onPress={goNext} activeOpacity={0.8}>
-          <Text style={nav.nextTxt}>{index === SLIDES.length - 1 ? "START →" : "NEXT →"}</Text>
-        </TouchableOpacity>
+        <Pressable
+          style={({ pressed }) => [nav.nextBtn, { opacity: pressed ? 0.8 : 1 }]}
+          onPress={goNext}
+        >
+          <Text style={nav.nextTxt}>{isLast ? "START →" : "NEXT →"}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -334,14 +327,14 @@ export default function OnboardingScreen() {
 
 const vc = StyleSheet.create({
   card: {
-    backgroundColor: "rgba(28,58,10,0.95)",
+    backgroundColor: "rgba(28,58,10,0.96)",
     borderWidth: 1,
     borderColor: "rgba(168,201,127,0.22)",
     borderRadius: 10,
     padding: 12,
-    minWidth: 110,
+    minWidth: 114,
   },
-  label: {
+  cardLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 8,
     letterSpacing: 1.2,
@@ -349,12 +342,12 @@ const vc = StyleSheet.create({
     marginBottom: 4,
     textTransform: "uppercase",
   },
-  value: {
+  cardValue: {
     fontFamily: "Inter_700Bold",
-    fontSize: 16,
+    fontSize: 17,
     color: D.greenLight,
   },
-  sub: {
+  cardSub: {
     fontFamily: "Inter_400Regular",
     fontSize: 8,
     color: "rgba(168,201,127,0.4)",
@@ -386,40 +379,62 @@ const vc = StyleSheet.create({
 });
 
 const tx = StyleSheet.create({
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+  },
+  stepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 14,
+  },
   stepNum: {
     fontFamily: "Inter_700Bold",
-    fontSize: 42,
+    fontSize: 48,
     color: D.creamBorder,
-    lineHeight: 44,
+    lineHeight: 50,
   },
   badge: {
     backgroundColor: D.greenMid,
     borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   badgeTxt: {
     fontFamily: "Inter_700Bold",
-    fontSize: 9,
+    fontSize: 10,
     color: D.greenLight,
-    letterSpacing: 1.2,
+    letterSpacing: 1.5,
     textTransform: "uppercase",
   },
   headline: {
     fontFamily: "Inter_700Bold",
-    fontSize: 28,
+    fontSize: 32,
     color: D.inkBlack,
-    lineHeight: 32,
+    lineHeight: 36,
     textTransform: "uppercase",
-    marginBottom: 10,
-    letterSpacing: -0.3,
+    marginBottom: 14,
+    letterSpacing: -0.5,
   },
   accent: { color: D.greenMid },
   body: {
     fontFamily: "Inter_400Regular",
-    fontSize: 13,
+    fontSize: 15,
     color: D.inkMid,
-    lineHeight: 20,
+    lineHeight: 23,
+    maxWidth: 320,
+  },
+  swipeHint: {
+    marginTop: 28,
+    alignItems: "center",
+  },
+  swipeHintTxt: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: D.creamBorder,
+    letterSpacing: 0.5,
   },
 });
 
@@ -436,24 +451,24 @@ const nav = StyleSheet.create({
   },
   skip: {
     fontFamily: "Inter_400Regular",
-    fontSize: 9,
+    fontSize: 10,
     color: "#AAAAAA",
     letterSpacing: 1,
     textTransform: "uppercase",
   },
-  dots: { flexDirection: "row", gap: 5, alignItems: "center" },
+  dots: { flexDirection: "row", gap: 6, alignItems: "center" },
   dot: { height: 4, borderRadius: 2, backgroundColor: D.greenMid },
   nextBtn: {
     backgroundColor: D.greenMid,
-    borderRadius: 6,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderRadius: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
   },
   nextTxt: {
     fontFamily: "Inter_700Bold",
-    fontSize: 10,
+    fontSize: 11,
     color: D.cream,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
 });

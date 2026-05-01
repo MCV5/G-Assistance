@@ -10,4 +10,9 @@ export interface ReceiptInput {
   imageBase64: string;
   mimeType: string;
   sourceType: ReceiptInputSourceType;
+  /**
+   * Local calendar date when the user started analysis (YYYY-MM-DD). Used when the receipt has no printed purchase date.
+   * @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+   */
+  scannedAt?: string;
 }

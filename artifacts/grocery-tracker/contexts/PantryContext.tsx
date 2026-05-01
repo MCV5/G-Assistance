@@ -14,6 +14,7 @@ import {
   computeAverageDaysBetweenPurchases,
   isPredictedNeeded,
 } from "@/lib/predictions";
+import { coerceCategory } from "@/lib/guessCategory";
 import { loadStore, newId, saveStore, type StoreSnapshot } from "@/lib/storage";
 import type {
   Category,
@@ -35,9 +36,11 @@ interface PantryContextValue {
     purchaseDate?: string,
   ) => Promise<ScanRecord>;
   markConsumed: (id: string) => Promise<void>;
+  markWasted: (id: string) => Promise<void>;
   unmarkConsumed: (id: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   refreshPredictions: () => Promise<void>;
+  addManualPantryItem: (name: string, category: Category) => Promise<void>;
   addManualShoppingItem: (name: string, category: Category) => Promise<void>;
   toggleShoppingItem: (id: string) => Promise<void>;
   removeShoppingItem: (id: string) => Promise<void>;
@@ -47,17 +50,29 @@ interface PantryContextValue {
 
 const PantryContext = createContext<PantryContextValue | null>(null);
 
+function shoppingDedupeKey(name: string, category: Category): string {
+  return `${name.trim().toLowerCase()}|${category}`;
+}
+
 function rebuildPredictedShoppingList(
   pantry: PantryItem[],
   existing: ShoppingListItem[],
 ): ShoppingListItem[] {
   const manual = existing.filter((s) => s.reason === "manual");
+  const manualKeys = new Set(
+    manual.map((s) => shoppingDedupeKey(s.name, s.category)),
+  );
   const checkedKeys = new Set(
-    existing.filter((s) => s.checked).map((s) => `${s.pantryItemId ?? s.name}`),
+    existing
+      .filter((s) => s.checked)
+      .map((s) =>
+        s.pantryItemId ? s.pantryItemId : shoppingDedupeKey(s.name, s.category),
+      ),
   );
 
   const predicted: ShoppingListItem[] = pantry
     .filter((p) => isPredictedNeeded(p))
+    .filter((p) => !manualKeys.has(shoppingDedupeKey(p.name, p.category)))
     .map((p) => {
       const key = p.id;
       const reason: ShoppingListItem["reason"] =
@@ -74,7 +89,14 @@ function rebuildPredictedShoppingList(
       };
     });
 
-  return [...predicted, ...manual];
+  const merged = [...predicted, ...manual];
+  merged.sort((a, b) => {
+    if (a.checked !== b.checked) return a.checked ? 1 : -1;
+    if (a.reason !== b.reason)
+      return a.reason === "predicted" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return merged;
 }
 
 export function PantryProvider({ children }: { children: React.ReactNode }) {
@@ -173,6 +195,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       const next: PantryItem[] = [...pantry];
 
       for (const incoming of items) {
+        const cat = coerceCategory(incoming.name, incoming.category);
         const lowerName = incoming.name.trim().toLowerCase();
         const existingIdx = next.findIndex(
           (p) => p.name.trim().toLowerCase() === lowerName,
@@ -191,7 +214,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             ...existing,
             quantity: existing.quantity + incoming.quantity,
             unit: incoming.unit || existing.unit,
-            category: incoming.category as Category,
+            category: cat,
+            isOrganic: incoming.isOrganic ?? existing.isOrganic,
+            organicConfidence:
+              incoming.organicConfidence ?? existing.organicConfidence,
+            organicSource: incoming.organicSource ?? existing.organicSource,
             estimatedShelfLifeDays:
               incoming.estimatedShelfLifeDays || existing.estimatedShelfLifeDays,
             lastPurchasedAt: purchaseDateIso,
@@ -210,7 +237,10 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
           next.push({
             id: newId(),
             name: incoming.name.trim(),
-            category: incoming.category as Category,
+            category: cat,
+            isOrganic: incoming.isOrganic,
+            organicConfidence: incoming.organicConfidence,
+            organicSource: incoming.organicSource,
             quantity: incoming.quantity,
             unit: incoming.unit,
             estimatedShelfLifeDays: incoming.estimatedShelfLifeDays,
@@ -252,6 +282,18 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     [pantry, persistPantry],
   );
 
+  const markWasted = useCallback(
+    async (id: string) => {
+      const next = pantry.map((p) =>
+        p.id === id
+          ? { ...p, consumed: true, wasWasted: true, wastedAt: new Date().toISOString() }
+          : p,
+      );
+      await persistPantry(next);
+    },
+    [pantry, persistPantry],
+  );
+
   const unmarkConsumed = useCallback(
     async (id: string) => {
       const next = pantry.map((p) =>
@@ -275,6 +317,48 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     await persistShopping(refreshed);
   }, [pantry, persistShopping, shoppingList]);
 
+  const addManualPantryItem = useCallback(
+    async (name: string, category: Category) => {
+      const now = new Date().toISOString();
+      const existing = pantry.find(
+        (p) => p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (existing) {
+        const next = pantry.map((p) =>
+          p.id === existing.id
+            ? {
+                ...p,
+                quantity: p.quantity + 1,
+                lastPurchasedAt: now,
+                purchases: [
+                  ...p.purchases,
+                  { date: now, quantity: 1, unit: p.unit || "unit", source: "manual" as const },
+                ],
+                consumed: false,
+              }
+            : p,
+        );
+        await persistPantry(next);
+      } else {
+        const item: PantryItem = {
+          id: newId(),
+          name: name.trim(),
+          category,
+          quantity: 1,
+          unit: "unit",
+          estimatedShelfLifeDays: 7,
+          firstSeenAt: now,
+          lastPurchasedAt: now,
+          purchases: [{ date: now, quantity: 1, unit: "unit", source: "manual" }],
+          averageDaysBetweenPurchases: null,
+          consumed: false,
+        };
+        await persistPantry([...pantry, item]);
+      }
+    },
+    [pantry, persistPantry],
+  );
+
   const addManualShoppingItem = useCallback(
     async (name: string, category: Category) => {
       const item: ShoppingListItem = {
@@ -285,9 +369,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         checked: false,
         createdAt: new Date().toISOString(),
       };
-      await persistShopping([...shoppingList, item]);
+      await persistShopping(
+        rebuildPredictedShoppingList(pantry, [...shoppingList, item]),
+      );
     },
-    [persistShopping, shoppingList],
+    [pantry, persistShopping, shoppingList],
   );
 
   const toggleShoppingItem = useCallback(
@@ -302,14 +388,16 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
   const removeShoppingItem = useCallback(
     async (id: string) => {
-      await persistShopping(shoppingList.filter((s) => s.id !== id));
+      const filtered = shoppingList.filter((s) => s.id !== id);
+      await persistShopping(rebuildPredictedShoppingList(pantry, filtered));
     },
-    [persistShopping, shoppingList],
+    [pantry, persistShopping, shoppingList],
   );
 
   const clearCheckedShoppingItems = useCallback(async () => {
-    await persistShopping(shoppingList.filter((s) => !s.checked));
-  }, [persistShopping, shoppingList]);
+    const filtered = shoppingList.filter((s) => !s.checked);
+    await persistShopping(rebuildPredictedShoppingList(pantry, filtered));
+  }, [pantry, persistShopping, shoppingList]);
 
   const resetAll = useCallback(async () => {
     setPantry([]);
@@ -326,9 +414,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       loading,
       addScannedItems,
       markConsumed,
+      markWasted,
       unmarkConsumed,
       removeItem,
       refreshPredictions,
+      addManualPantryItem,
       addManualShoppingItem,
       toggleShoppingItem,
       removeShoppingItem,
@@ -342,9 +432,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       loading,
       addScannedItems,
       markConsumed,
+      markWasted,
       unmarkConsumed,
       removeItem,
       refreshPredictions,
+      addManualPantryItem,
       addManualShoppingItem,
       toggleShoppingItem,
       removeShoppingItem,

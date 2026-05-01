@@ -21,7 +21,24 @@ export interface ReceiptInput {
   imageBase64: string;
   mimeType: string;
   sourceType: ReceiptInputSourceType;
+  /**
+   * Local calendar date when the user started analysis (YYYY-MM-DD). Used when the receipt has no printed purchase date.
+   * @pattern ^[0-9]{4}-[0-9]{2}-[0-9]{2}$
+   */
+  scannedAt?: string;
 }
+
+/**
+ * Where organic inference came from.
+ */
+export type ExtractedItemOrganicSource =
+  (typeof ExtractedItemOrganicSource)[keyof typeof ExtractedItemOrganicSource];
+
+export const ExtractedItemOrganicSource = {
+  label: "label",
+  name_keyword: "name_keyword",
+  manual: "manual",
+} as const;
 
 export interface ExtractedItem {
   name: string;
@@ -29,12 +46,24 @@ export interface ExtractedItem {
   quantity: number;
   unit: string;
   estimatedShelfLifeDays: number;
+  /** True when item is explicitly marked organic on packaging/receipt text. */
+  isOrganic?: boolean;
+  /**
+   * Confidence score for organic inference (0..1).
+   * @minimum 0
+   * @maximum 1
+   */
+  organicConfidence?: number;
+  /** Where organic inference came from. */
+  organicSource?: ExtractedItemOrganicSource;
 }
 
 export interface ReceiptResult {
   items: ExtractedItem[];
   storeName?: string;
   purchaseDate?: string;
+  /** True when purchaseDate was derived from scannedAt (no date on receipt). */
+  purchaseDateIsEstimated?: boolean;
 }
 
 export interface ApiError {

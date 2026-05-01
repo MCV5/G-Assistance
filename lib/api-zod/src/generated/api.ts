@@ -16,11 +16,25 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Extract grocery items from a receipt or photo
  */
+export const analyzeReceiptBodyScannedAtRegExp = new RegExp(
+  "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+);
+
 export const AnalyzeReceiptBody = zod.object({
   imageBase64: zod.string(),
   mimeType: zod.string(),
   sourceType: zod.enum(["receipt", "bag", "cart"]),
+  scannedAt: zod
+    .string()
+    .regex(analyzeReceiptBodyScannedAtRegExp)
+    .optional()
+    .describe(
+      "Local calendar date when the user started analysis (YYYY-MM-DD). Used when the receipt has no printed purchase date.",
+    ),
 });
+
+export const analyzeReceiptResponseItemsItemOrganicConfidenceMin = 0;
+export const analyzeReceiptResponseItemsItemOrganicConfidenceMax = 1;
 
 export const AnalyzeReceiptResponse = zod.object({
   items: zod.array(
@@ -30,10 +44,32 @@ export const AnalyzeReceiptResponse = zod.object({
       quantity: zod.number(),
       unit: zod.string(),
       estimatedShelfLifeDays: zod.number(),
+      isOrganic: zod
+        .boolean()
+        .optional()
+        .describe(
+          "True when item is explicitly marked organic on packaging\/receipt text.",
+        ),
+      organicConfidence: zod
+        .number()
+        .min(analyzeReceiptResponseItemsItemOrganicConfidenceMin)
+        .max(analyzeReceiptResponseItemsItemOrganicConfidenceMax)
+        .optional()
+        .describe("Confidence score for organic inference (0..1)."),
+      organicSource: zod
+        .enum(["label", "name_keyword", "manual"])
+        .optional()
+        .describe("Where organic inference came from."),
     }),
   ),
   storeName: zod.string().optional(),
   purchaseDate: zod.string().optional(),
+  purchaseDateIsEstimated: zod
+    .boolean()
+    .optional()
+    .describe(
+      "True when purchaseDate was derived from scannedAt (no date on receipt).",
+    ),
 });
 
 /**

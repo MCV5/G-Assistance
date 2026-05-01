@@ -4,7 +4,8 @@ export const CATEGORY_META: Record<
   Category,
   { icon: keyof typeof iconMap; tone: string }
 > = {
-  Produce: { icon: "leaf", tone: "#3a8a4f" },
+  Fruit: { icon: "sun", tone: "#e07c3c" },
+  Vegetables: { icon: "leaf", tone: "#3a8a4f" },
   Dairy: { icon: "cup", tone: "#5b8ab8" },
   Meat: { icon: "flame", tone: "#b94a3a" },
   Pantry: { icon: "package", tone: "#8a6b3a" },
@@ -14,6 +15,7 @@ export const CATEGORY_META: Record<
   Snacks: { icon: "cookie", tone: "#b87a3a" },
   Household: { icon: "home", tone: "#6b6b8a" },
   "Personal Care": { icon: "heart", tone: "#b86b8a" },
+  Prepared: { icon: "shoppingBag", tone: "#8e6bc9" },
   Other: { icon: "tag", tone: "#7a7a7a" },
 };
 
@@ -23,6 +25,7 @@ import { Feather } from "@expo/vector-icons";
 type FeatherName = ComponentProps<typeof Feather>["name"];
 
 const iconMap = {
+  sun: "sun" as FeatherName,
   leaf: "leaf" as FeatherName,
   cup: "coffee" as FeatherName,
   flame: "zap" as FeatherName,
@@ -33,13 +36,18 @@ const iconMap = {
   cookie: "disc" as FeatherName,
   home: "home" as FeatherName,
   heart: "heart" as FeatherName,
+  shoppingBag: "shopping-bag" as FeatherName,
   tag: "tag" as FeatherName,
 };
 
-export function getCategoryIcon(category: Category): FeatherName {
-  return iconMap[CATEGORY_META[category].icon];
+function getCategoryMetaSafe(category: string) {
+  return CATEGORY_META[category as Category] ?? CATEGORY_META.Other;
 }
 
-export function getCategoryTone(category: Category): string {
-  return CATEGORY_META[category].tone;
+export function getCategoryIcon(category: Category | string): FeatherName {
+  return iconMap[getCategoryMetaSafe(category).icon];
+}
+
+export function getCategoryTone(category: Category | string): string {
+  return getCategoryMetaSafe(category).tone;
 }

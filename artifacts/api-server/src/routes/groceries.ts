@@ -78,7 +78,7 @@ function getScanLimits() {
 
   const includeStoreMetadata = process.env.SCAN_INCLUDE_STORE_METADATA !== "false";
 
-  const rawTokens = Number.parseInt(process.env.SCAN_MAX_OUTPUT_TOKENS ?? "4096", 10);
+  const rawTokens = Number.parseInt(process.env.SCAN_MAX_OUTPUT_TOKENS ?? "2048", 10);
   const maxOutputTokens = Number.isFinite(rawTokens) ? Math.min(Math.max(rawTokens, 512), 8192) : 4096;
 
   return { maxItems, maxItemNameLength, includeStoreMetadata, maxOutputTokens };
@@ -264,11 +264,11 @@ SHARED RULES (all source types)
   - organicSource: one of label, name_keyword, manual.
 • Return ONLY valid JSON matching the schema. No markdown, no commentary.`;
 
-// Primary model, with fallbacks if a model id is retired or rate-limited
+// Try faster model first; fall back to 2.5 if needed (quality / availability).
 const CANDIDATE_MODELS = [
+  "gemini-2.0-flash",
   "gemini-2.5-flash",
   "gemini-2.5-flash-preview-09-2025",
-  "gemini-2.0-flash",
 ];
 
 async function callGemini(

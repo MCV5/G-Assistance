@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import * as Crypto from "expo-crypto";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -25,6 +26,11 @@ function localCalendarDateYyyyMmDd(d = new Date()) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+async function receiptImageFingerprint(base64: string): Promise<string> {
+  const sample = `${base64.length}\n${base64.slice(0, 2048)}\n${base64.slice(-2048)}`;
+  return Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, sample);
 }
 
 type SourceType = "receipt" | "bag" | "cart";
@@ -68,18 +74,6 @@ export default function ScanScreen() {
 
   const analyze = useAnalyzeReceipt({
     mutation: {
-      onSuccess: (data) => {
-        const payload = encodeURIComponent(
-          JSON.stringify({
-            items: data.items,
-            sourceType,
-            storeName: data.storeName,
-            purchaseDate: data.purchaseDate,
-          }),
-        );
-        setPreview(null);
-        router.push(`/scan-review?data=${payload}`);
-      },
       onError: (mutationErr) => {
         const err: unknown = mutationErr;
         const networkMsg =
@@ -145,7 +139,7 @@ export default function ScanScreen() {
       base64: true,
       allowsEditing: sourceType === "receipt",
       aspect: sourceType === "receipt" ? ([3, 4] as [number, number]) : undefined,
-      quality: 0.7,
+      quality: 0.55,
     });
     if (!result.canceled) handleAsset(result.assets[0]);
   }
@@ -158,7 +152,7 @@ export default function ScanScreen() {
       base64: true,
       allowsEditing: sourceType === "receipt",
       aspect: sourceType === "receipt" ? ([3, 4] as [number, number]) : undefined,
-      quality: 0.7,
+      quality: 0.55,
     });
     if (!result.canceled) handleAsset(result.assets[0]);
   }
@@ -168,14 +162,33 @@ export default function ScanScreen() {
     if (Platform.OS !== "web") {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    analyze.mutate({
-      data: {
-        imageBase64: preview.base64,
-        mimeType: preview.mimeType,
-        sourceType,
-        scannedAt: localCalendarDateYyyyMmDd(),
+    const snap = preview;
+    analyze.mutate(
+      {
+        data: {
+          imageBase64: snap.base64,
+          mimeType: snap.mimeType,
+          sourceType,
+          scannedAt: localCalendarDateYyyyMmDd(),
+        },
       },
-    });
+      {
+        onSuccess: async (data) => {
+          const imageFingerprint = await receiptImageFingerprint(snap.base64);
+          const payload = encodeURIComponent(
+            JSON.stringify({
+              items: data.items,
+              sourceType,
+              storeName: data.storeName,
+              purchaseDate: data.purchaseDate,
+              imageFingerprint,
+            }),
+          );
+          setPreview(null);
+          router.push(`/scan-review?data=${payload}`);
+        },
+      },
+    );
   }
 
   const isWeb = Platform.OS === "web";

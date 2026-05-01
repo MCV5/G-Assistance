@@ -79,7 +79,7 @@ function getScanLimits() {
   const includeStoreMetadata = process.env.SCAN_INCLUDE_STORE_METADATA !== "false";
 
   const rawTokens = Number.parseInt(process.env.SCAN_MAX_OUTPUT_TOKENS ?? "2048", 10);
-  const maxOutputTokens = Number.isFinite(rawTokens) ? Math.min(Math.max(rawTokens, 512), 8192) : 4096;
+  const maxOutputTokens = Number.isFinite(rawTokens) ? Math.min(Math.max(rawTokens, 512), 8192) : 2048;
 
   return { maxItems, maxItemNameLength, includeStoreMetadata, maxOutputTokens };
 }

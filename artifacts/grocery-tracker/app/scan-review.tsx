@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
@@ -23,6 +24,9 @@ import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
 import { coerceCategory } from "@/lib/guessCategory";
 import { CATEGORIES, type Category, type ScanSource } from "@/lib/types";
+
+const SCAN_FINGERPRINT_STORAGE_KEY = "@grocery_scan_fingerprints";
+const DUPLICATE_SCAN_WARN_HOURS = 72;
 
 function localCalendarDateYyyyMmDd(d = new Date()) {
   const y = d.getFullYear();
@@ -50,6 +54,8 @@ interface ScanPayload {
   purchaseDate?: string;
   /** From analyze API when purchase date was inferred from scan date. */
   purchaseDateIsEstimated?: boolean;
+  /** SHA-256 of image sample — used to warn if the same receipt is scanned again. */
+  imageFingerprint?: string;
   fromBarcode?: boolean;
   notFound?: boolean;
   barcode?: string;
@@ -80,6 +86,35 @@ export default function ScanReviewScreen() {
   const [editing, setEditing] = useState<{ index: number; item: ExtractedItem } | null>(null);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const fp = initial.imageFingerprint;
+    if (!fp) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(SCAN_FINGERPRINT_STORAGE_KEY);
+        const list = raw ? (JSON.parse(raw) as { fp: string; savedAt: number }[]) : [];
+        if (!Array.isArray(list)) return;
+        const dup = list.find((x) => x.fp === fp);
+        if (!dup || cancelled) return;
+        const hours = (Date.now() - dup.savedAt) / 3600000;
+        if (hours > DUPLICATE_SCAN_WARN_HOURS) return;
+        Alert.alert(
+          "Same receipt again?",
+          "This looks like a scan you already saved recently. Saving will increase quantities for matching items and add another activity entry. Tap Save only if that’s what you want.",
+          [{ text: "OK" }],
+        );
+      } catch {
+        /* ignore */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initial.imageFingerprint]);
+
   function updateItem(index: number, next: ExtractedItem) {
     setItems((prev) => prev.map((it, i) => (i === index ? next : it)));
   }
@@ -108,6 +143,20 @@ export default function ScanReviewScreen() {
         initial.storeName,
         resolved.value,
       );
+      if (initial.imageFingerprint) {
+        try {
+          const raw = await AsyncStorage.getItem(SCAN_FINGERPRINT_STORAGE_KEY);
+          const prev = raw ? (JSON.parse(raw) as { fp: string; savedAt: number }[]) : [];
+          const list = Array.isArray(prev) ? prev : [];
+          list.unshift({ fp: initial.imageFingerprint, savedAt: Date.now() });
+          await AsyncStorage.setItem(
+            SCAN_FINGERPRINT_STORAGE_KEY,
+            JSON.stringify(list.slice(0, 40)),
+          );
+        } catch {
+          /* ignore */
+        }
+      }
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }

@@ -2,7 +2,7 @@ export type CustomFetchOptions = RequestInit & {
   responseType?: "json" | "text" | "blob" | "auto";
 };
 
-export type ErrorType<T = unknown> = ApiError<T>;
+export type ErrorType<T = unknown> = HttpApiError<T>;
 
 export type BodyType<T> = T;
 
@@ -171,8 +171,8 @@ function buildErrorMessage(response: Response, data: unknown): string {
   return prefix;
 }
 
-export class ApiError<T = unknown> extends Error {
-  readonly name = "ApiError";
+export class HttpApiError<T = unknown> extends Error {
+  readonly name = "HttpApiError";
   readonly status: number;
   readonly statusText: string;
   readonly data: T | null;
@@ -364,7 +364,7 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
-    throw new ApiError(response, errorData, requestInfo);
+    throw new HttpApiError(response, errorData, requestInfo);
   }
 
   return (await parseSuccessBody(response, responseType, requestInfo)) as T;

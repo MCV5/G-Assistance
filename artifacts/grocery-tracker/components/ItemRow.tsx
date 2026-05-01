@@ -50,7 +50,7 @@ export function ItemRow({
         },
       ]}
     >
-      <CategoryIcon category={item.category} size={42} />
+      <CategoryIcon category={item.category} size={34} />
       <View style={styles.body}>
         <View style={styles.titleRow}>
           <Text
@@ -67,7 +67,7 @@ export function ItemRow({
           <StatusPill status={status} />
           {item.isOrganic ? (
             <View style={[styles.organicPill, { backgroundColor: `${colors.success}22` }]}>
-              <Text style={[styles.organicText, { color: colors.success }]}>ORGANIC</Text>
+              <Text style={[styles.organicText, { color: colors.success }]}>ORG</Text>
             </View>
           ) : null}
           <Text
@@ -81,7 +81,7 @@ export function ItemRow({
         </View>
       </View>
       {rightAction ?? (
-        <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
       )}
     </Pressable>
   );
@@ -91,10 +91,11 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 14,
-    borderRadius: 16,
+    padding: 10,
+    minHeight: 68,
+    borderRadius: 12,
     borderWidth: 1,
-    gap: 12,
+    gap: 10,
   },
   body: {
     flex: 1,
@@ -104,36 +105,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   name: {
     flex: 1,
     fontFamily: "Inter_600SemiBold",
-    fontSize: 16,
+    fontSize: 14,
   },
   qty: {
     fontFamily: "Inter_500Medium",
-    fontSize: 13,
+    fontSize: 12,
   },
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    flexWrap: "wrap",
+    gap: 6,
+    flexWrap: "nowrap",
+    overflow: "hidden",
   },
   meta: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
+    fontSize: 11,
     flexShrink: 1,
   },
   organicPill: {
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
   organicText: {
     fontFamily: "Inter_700Bold",
-    fontSize: 9,
-    letterSpacing: 0.6,
+    fontSize: 8,
+    letterSpacing: 0.5,
   },
 });

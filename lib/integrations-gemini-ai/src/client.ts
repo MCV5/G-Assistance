@@ -15,11 +15,20 @@ export function getAi(): GoogleGenAI {
     );
   }
 
-  const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+  const integrationBase = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL?.trim();
+
+  // Replit's AI integration talks to Gemini through a proxy (custom base URL + integration key).
+  // On Render / self-hosted installs, people often set GEMINI_API_KEY from Google AI Studio but
+  // still have an old AI_INTEGRATIONS_GEMINI_BASE_URL in env — routing would break. Use the
+  // public Gemini endpoint whenever GEMINI_API_KEY is present.
+  const useIntegrationProxy =
+    Boolean(integrationBase) && !process.env.GEMINI_API_KEY;
 
   _ai = new GoogleGenAI({
     apiKey,
-    ...(baseUrl ? { httpOptions: { apiVersion: "", baseUrl } } : {}),
+    ...(useIntegrationProxy && integrationBase
+      ? { httpOptions: { apiVersion: "", baseUrl: integrationBase } }
+      : {}),
   });
 
   return _ai;

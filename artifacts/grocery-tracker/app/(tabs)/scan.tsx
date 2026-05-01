@@ -15,7 +15,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAnalyzeReceipt } from "@workspace/api-client-react";
+import { HttpApiError, useAnalyzeReceipt } from "@workspace/api-client-react";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { useColors } from "@/hooks/useColors";
@@ -80,7 +80,37 @@ export default function ScanScreen() {
         setPreview(null);
         router.push(`/scan-review?data=${payload}`);
       },
-      onError: (err) => {
+      onError: (mutationErr) => {
+        const err: unknown = mutationErr;
+        const networkMsg =
+          "Could not reach the API. Set EXPO_PUBLIC_API_URL to your server origin (e.g. https://your-app.onrender.com) with no trailing slash, then restart Expo.";
+
+        if (err instanceof HttpApiError) {
+          const d = err.data as { error?: string } | null;
+          const fromBody =
+            d && typeof d.error === "string" ? d.error.trim() : "";
+          if (fromBody) {
+            Alert.alert("Couldn't analyze this image", fromBody);
+            return;
+          }
+          if (err.status === 0) {
+            Alert.alert("Couldn't analyze this image", networkMsg);
+            return;
+          }
+          Alert.alert("Couldn't analyze this image", err.message);
+          return;
+        }
+
+        const isNetworkish =
+          err instanceof Error &&
+          /network request failed|failed to fetch|load failed|network error/i.test(
+            err.message,
+          );
+        if (isNetworkish) {
+          Alert.alert("Couldn't analyze this image", networkMsg);
+          return;
+        }
+
         const msg =
           err instanceof Error
             ? err.message

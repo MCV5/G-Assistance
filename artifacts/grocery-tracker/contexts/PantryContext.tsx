@@ -36,6 +36,7 @@ interface PantryContextValue {
     purchaseDate?: string,
   ) => Promise<ScanRecord>;
   markConsumed: (id: string) => Promise<void>;
+  markWasted: (id: string) => Promise<void>;
   unmarkConsumed: (id: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   refreshPredictions: () => Promise<void>;
@@ -49,17 +50,29 @@ interface PantryContextValue {
 
 const PantryContext = createContext<PantryContextValue | null>(null);
 
+function shoppingDedupeKey(name: string, category: Category): string {
+  return `${name.trim().toLowerCase()}|${category}`;
+}
+
 function rebuildPredictedShoppingList(
   pantry: PantryItem[],
   existing: ShoppingListItem[],
 ): ShoppingListItem[] {
   const manual = existing.filter((s) => s.reason === "manual");
+  const manualKeys = new Set(
+    manual.map((s) => shoppingDedupeKey(s.name, s.category)),
+  );
   const checkedKeys = new Set(
-    existing.filter((s) => s.checked).map((s) => `${s.pantryItemId ?? s.name}`),
+    existing
+      .filter((s) => s.checked)
+      .map((s) =>
+        s.pantryItemId ? s.pantryItemId : shoppingDedupeKey(s.name, s.category),
+      ),
   );
 
   const predicted: ShoppingListItem[] = pantry
     .filter((p) => isPredictedNeeded(p))
+    .filter((p) => !manualKeys.has(shoppingDedupeKey(p.name, p.category)))
     .map((p) => {
       const key = p.id;
       const reason: ShoppingListItem["reason"] =
@@ -76,7 +89,14 @@ function rebuildPredictedShoppingList(
       };
     });
 
-  return [...predicted, ...manual];
+  const merged = [...predicted, ...manual];
+  merged.sort((a, b) => {
+    if (a.checked !== b.checked) return a.checked ? 1 : -1;
+    if (a.reason !== b.reason)
+      return a.reason === "predicted" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return merged;
 }
 
 export function PantryProvider({ children }: { children: React.ReactNode }) {
@@ -262,6 +282,18 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     [pantry, persistPantry],
   );
 
+  const markWasted = useCallback(
+    async (id: string) => {
+      const next = pantry.map((p) =>
+        p.id === id
+          ? { ...p, consumed: true, wasWasted: true, wastedAt: new Date().toISOString() }
+          : p,
+      );
+      await persistPantry(next);
+    },
+    [pantry, persistPantry],
+  );
+
   const unmarkConsumed = useCallback(
     async (id: string) => {
       const next = pantry.map((p) =>
@@ -337,9 +369,11 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         checked: false,
         createdAt: new Date().toISOString(),
       };
-      await persistShopping([...shoppingList, item]);
+      await persistShopping(
+        rebuildPredictedShoppingList(pantry, [...shoppingList, item]),
+      );
     },
-    [persistShopping, shoppingList],
+    [pantry, persistShopping, shoppingList],
   );
 
   const toggleShoppingItem = useCallback(
@@ -354,14 +388,16 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
   const removeShoppingItem = useCallback(
     async (id: string) => {
-      await persistShopping(shoppingList.filter((s) => s.id !== id));
+      const filtered = shoppingList.filter((s) => s.id !== id);
+      await persistShopping(rebuildPredictedShoppingList(pantry, filtered));
     },
-    [persistShopping, shoppingList],
+    [pantry, persistShopping, shoppingList],
   );
 
   const clearCheckedShoppingItems = useCallback(async () => {
-    await persistShopping(shoppingList.filter((s) => !s.checked));
-  }, [persistShopping, shoppingList]);
+    const filtered = shoppingList.filter((s) => !s.checked);
+    await persistShopping(rebuildPredictedShoppingList(pantry, filtered));
+  }, [pantry, persistShopping, shoppingList]);
 
   const resetAll = useCallback(async () => {
     setPantry([]);
@@ -378,6 +414,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       loading,
       addScannedItems,
       markConsumed,
+      markWasted,
       unmarkConsumed,
       removeItem,
       refreshPredictions,
@@ -395,6 +432,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       loading,
       addScannedItems,
       markConsumed,
+      markWasted,
       unmarkConsumed,
       removeItem,
       refreshPredictions,

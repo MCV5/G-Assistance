@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
-import { useMemo, useState } from "react";
+import * as Haptics from "expo-haptics";
+import { useMemo, useRef, useState, useCallback } from "react";
 import {
   Alert,
   FlatList,
@@ -11,14 +12,19 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddItemModal } from "@/components/AddItemModal";
 import { EmptyState } from "@/components/EmptyState";
+import { ItemActionSheet } from "@/components/ItemActionSheet";
+import { ItemDetailSheet } from "@/components/ItemDetailSheet";
 import { ItemRow } from "@/components/ItemRow";
+import { SwipeAddAction, SwipeUsedAction } from "@/components/SwipeActions";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
 import { getCategoryTone } from "@/lib/categories";
+import { inferFamily } from "@/lib/itemInsights";
 import { getDaysUntilNeeded } from "@/lib/predictions";
 import { CATEGORIES, type Category, type PantryItem } from "@/lib/types";
 
@@ -46,15 +52,63 @@ const FILTERS: { key: Filter; label: string }[] = [
 export default function PantryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { pantry, markConsumed, unmarkConsumed, removeItem, addManualPantryItem } = usePantry();
+  const {
+    pantry,
+    markConsumed,
+    markWasted,
+    unmarkConsumed,
+    removeItem,
+    addManualPantryItem,
+    addManualShoppingItem,
+  } = usePantry();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("need");
   const [addOpen, setAddOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [actionItem, setActionItem] = useState<PantryItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<PantryItem | null>(null);
+
+  const promptAddToShoppingList = useCallback(
+    (item: PantryItem, context: "used" | "wasted") => {
+      const preface =
+        context === "wasted"
+          ? "Sorry that went to waste."
+          : "Great — it's marked off your pantry.";
+      Alert.alert(
+        "Add to shopping list?",
+        `${preface}\n\nRemember to buy "${item.name}" on your next trip?`,
+        [
+          { text: "Not now", style: "cancel" },
+          {
+            text: "Add to list",
+            onPress: () => addManualShoppingItem(item.name, item.category),
+          },
+        ],
+      );
+    },
+    [addManualShoppingItem],
+  );
+
+  const handleUsedItUp = useCallback(
+    async (item: PantryItem) => {
+      await markConsumed(item.id);
+      promptAddToShoppingList(item, "used");
+    },
+    [markConsumed, promptAddToShoppingList],
+  );
+
+  const handleWasted = useCallback(
+    async (item: PantryItem) => {
+      await markWasted(item.id);
+      promptAddToShoppingList(item, "wasted");
+    },
+    [markWasted, promptAddToShoppingList],
+  );
 
   const rows = useMemo<PantryListRow[]>(() => {
-    let list = pantry.slice();
+    // Active pantry only — finished items leave the main list (insights still has history)
+    let list = pantry.filter((p) => !p.consumed);
     if (filter === "need") {
       list = list.filter((p) => {
         const next = new Date(
@@ -62,7 +116,7 @@ export default function PantryScreen() {
             (p.averageDaysBetweenPurchases ?? p.estimatedShelfLifeDays) *
               86400000,
         );
-        return p.consumed || next.getTime() <= Date.now() + 5 * 86400000;
+        return next.getTime() <= Date.now() + 5 * 86400000;
       });
     } else if (filter !== "all") {
       list = list.filter((p) => p.category === filter);
@@ -126,6 +180,45 @@ export default function PantryScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
+      {/* Quick action sheet — opens on tap */}
+      <ItemActionSheet
+        item={actionItem}
+        onClose={() => setActionItem(null)}
+        onUsedItUp={(item) => {
+          handleUsedItUp(item);
+        }}
+        onWasted={(item) => {
+          handleWasted(item);
+        }}
+        onAddToList={(item) => addManualShoppingItem(item.name, item.category)}
+        onViewDetails={(item) => setSelectedItem(item)}
+      />
+
+      {/* Full detail sheet — opens from "View Details" */}
+      <ItemDetailSheet
+        item={selectedItem}
+        onClose={() => setSelectedItem(null)}
+        onMarkConsumed={async (id) => {
+          const it = selectedItem?.id === id ? selectedItem : pantry.find((p) => p.id === id);
+          await markConsumed(id);
+          setSelectedItem(null);
+          if (it) promptAddToShoppingList(it, "used");
+        }}
+        onMarkWasted={async (id) => {
+          const it = selectedItem?.id === id ? selectedItem : pantry.find((p) => p.id === id);
+          await markWasted(id);
+          setSelectedItem(null);
+          if (it) promptAddToShoppingList(it, "wasted");
+        }}
+        onMarkInStock={async (id) => {
+          await unmarkConsumed(id);
+          setSelectedItem(null);
+        }}
+        onDelete={async (id) => {
+          await removeItem(id);
+          setSelectedItem(null);
+        }}
+      />
       <AddItemModal
         visible={addOpen}
         title="Add to pantry"
@@ -221,16 +314,19 @@ export default function PantryScreen() {
                 style={[
                   styles.sortChip,
                   {
-                    backgroundColor: active ? colors.primary : colors.card,
+                    backgroundColor: colors.card,
                     borderColor: active ? colors.primary : colors.border,
                   },
                 ]}
               >
+                {active && (
+                  <Feather name="check" size={11} color={colors.primary} />
+                )}
                 <Text
                   style={[
                     styles.sortChipText,
                     {
-                      color: active ? colors.primaryForeground : colors.foreground,
+                      color: active ? colors.primary : colors.mutedForeground,
                     },
                   ]}
                 >
@@ -247,34 +343,20 @@ export default function PantryScreen() {
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingBottom: 120,
-          gap: 10,
+          gap: 7,
         }}
         renderItem={({ item: row }) =>
           row.kind === "item" ? (
-            <ItemRow
+            <SwipeableItemRow
               item={row.item}
-              onPress={() => {
-                Alert.alert(
-                  row.item.name,
-                  "What do you want to do with this item?",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    row.item.consumed
-                      ? {
-                          text: "Mark in stock",
-                          onPress: () => unmarkConsumed(row.item.id),
-                        }
-                      : {
-                          text: "I used it up",
-                          onPress: () => markConsumed(row.item.id),
-                        },
-                    {
-                      text: "Delete",
-                      style: "destructive",
-                      onPress: () => removeItem(row.item.id),
-                    },
-                  ],
-                );
+              onPress={() => setActionItem(row.item)}
+              onAddToList={() => {
+                if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                addManualShoppingItem(row.item.name, row.item.category);
+              }}
+              onMarkUsed={() => {
+                if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                handleUsedItUp(row.item);
               }}
             />
           ) : (
@@ -322,30 +404,17 @@ export default function PantryScreen() {
               {expandedGroups[row.id]
                 ? row.members.map((member) => (
                     <View key={member.id} style={styles.groupChildWrap}>
-                      <ItemRow
+                      <SwipeableItemRow
+                        key={member.id}
                         item={member}
-                        onPress={() => {
-                          Alert.alert(
-                            member.name,
-                            "What do you want to do with this item?",
-                            [
-                              { text: "Cancel", style: "cancel" },
-                              member.consumed
-                                ? {
-                                    text: "Mark in stock",
-                                    onPress: () => unmarkConsumed(member.id),
-                                  }
-                                : {
-                                    text: "I used it up",
-                                    onPress: () => markConsumed(member.id),
-                                  },
-                              {
-                                text: "Delete",
-                                style: "destructive",
-                                onPress: () => removeItem(member.id),
-                              },
-                            ],
-                          );
+                        onPress={() => setActionItem(member)}
+                        onAddToList={() => {
+                          if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          addManualShoppingItem(member.name, member.category);
+                        }}
+                        onMarkUsed={() => {
+                          if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          handleUsedItUp(member);
                         }}
                       />
                     </View>
@@ -371,6 +440,40 @@ export default function PantryScreen() {
         }
       />
     </View>
+  );
+}
+
+function SwipeableItemRow({
+  item,
+  onPress,
+  onAddToList,
+  onMarkUsed,
+}: {
+  item: import("@/lib/types").PantryItem;
+  onPress: () => void;
+  onAddToList: () => void;
+  onMarkUsed: () => void;
+}) {
+  const swipeRef = useRef<Swipeable>(null);
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      friction={2}
+      rightThreshold={60}
+      leftThreshold={60}
+      renderRightActions={() => <SwipeAddAction />}
+      renderLeftActions={() => <SwipeUsedAction />}
+      onSwipeableRightOpen={() => {
+        onAddToList();
+        setTimeout(() => swipeRef.current?.close(), 300);
+      }}
+      onSwipeableLeftOpen={() => {
+        onMarkUsed();
+      }}
+    >
+      <ItemRow item={item} onPress={onPress} />
+    </Swipeable>
   );
 }
 
@@ -418,8 +521,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   sortChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
   },
@@ -430,15 +536,16 @@ const styles = StyleSheet.create({
   groupRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
+    minHeight: 68,
     borderWidth: 1,
-    borderRadius: 16,
-    padding: 12,
+    borderRadius: 12,
+    padding: 10,
   },
   groupIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -450,27 +557,20 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
+    fontSize: 13,
     flex: 1,
   },
   groupCount: {
     fontFamily: "Inter_500Medium",
-    fontSize: 12,
+    fontSize: 11,
   },
   groupMeta: {
-    marginTop: 3,
+    marginTop: 2,
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
+    fontSize: 11,
   },
   groupChildWrap: {
-    paddingLeft: 14,
+    paddingLeft: 12,
   },
 });
 
-function inferFamily(name: string): string | null {
-  const s = name.toLowerCase();
-  if (s.includes("salad") || s.includes("coleslaw") || s.includes("slaw")) {
-    return "Salads";
-  }
-  return null;
-}

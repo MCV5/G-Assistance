@@ -6,6 +6,68 @@ type AnalyzeReceiptOutput = z.infer<typeof AnalyzeReceiptResponse>;
 
 const router: IRouter = Router();
 
+/**
+ * Strip `data:*;base64,` prefix and whitespace. Some runtimes send full data URLs;
+ * Gemini expects raw base64. Whitespace/newlines in the payload also break decoding.
+ */
+function normalizeReceiptImage(
+  imageBase64: string,
+  mimeType: string,
+): { data: string; mimeType: string } {
+  const trimmed = imageBase64.trim();
+  const dataUrl = /^data:([^;]+);base64,(.+)$/is.exec(trimmed);
+  if (dataUrl) {
+    const mt = (dataUrl[1]?.trim() || mimeType).split(";")[0]?.trim() || mimeType;
+    const data = (dataUrl[2] ?? "").replace(/\s+/g, "");
+    return { data, mimeType: mt || "image/jpeg" };
+  }
+  return { data: trimmed.replace(/\s+/g, ""), mimeType };
+}
+
+function extractTextFromGeminiResponse(response: unknown): string {
+  if (response && typeof response === "object" && "text" in response) {
+    const t = (response as { text?: string }).text;
+    if (typeof t === "string" && t.trim()) return t;
+  }
+  const r = response as {
+    candidates?: Array<{
+      content?: { parts?: Array<{ text?: string } | Record<string, unknown>> };
+    }>;
+  };
+  const parts = r.candidates?.[0]?.content?.parts;
+  if (!parts?.length) return "";
+  const pieces: string[] = [];
+  for (const p of parts) {
+    if (p && typeof p === "object" && "text" in p && typeof (p as { text?: string }).text === "string") {
+      pieces.push((p as { text: string }).text);
+    }
+  }
+  return pieces.join("").trim();
+}
+
+function isProbablyTransientGeminiError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    msg.includes("429") ||
+    m.includes("quota") ||
+    m.includes("rate limit") ||
+    m.includes("resource_exhausted") ||
+    m.includes("503") ||
+    m.includes("502") ||
+    m.includes("unavailable") ||
+    m.includes("deadline") ||
+    m.includes("timeout") ||
+    m.includes("etimedout") ||
+    m.includes("econnreset") ||
+    m.includes("fetch failed") ||
+    m.includes("network error") ||
+    m.includes("overloaded") ||
+    m.includes("not found") ||
+    m.includes("not_found") ||
+    m.includes("empty response")
+  );
+}
+
 /** Limits what we ask Gemini for and what we return (override via .env). */
 function getScanLimits() {
   const rawMax = Number.parseInt(process.env.SCAN_MAX_ITEMS ?? "50", 10);
@@ -202,10 +264,11 @@ SHARED RULES (all source types)
   - organicSource: one of label, name_keyword, manual.
 • Return ONLY valid JSON matching the schema. No markdown, no commentary.`;
 
-// Primary model, with one fallback
+// Primary model, with fallbacks if a model id is retired or rate-limited
 const CANDIDATE_MODELS = [
   "gemini-2.5-flash",
-  "gemini-2.5-flash-preview-04-17",
+  "gemini-2.5-flash-preview-09-2025",
+  "gemini-2.0-flash",
 ];
 
 async function callGemini(
@@ -246,15 +309,19 @@ async function callGemini(
         },
       });
 
-      let text = response.text ?? "{}";
+      let text = extractTextFromGeminiResponse(response);
+      if (!text) {
+        throw new Error(
+          "Gemini returned an empty response (image may be too large or unclear). Try a smaller photo or better lighting.",
+        );
+      }
       text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) text = jsonMatch[0];
       return text;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      // If quota/model unavailable, try next model; otherwise rethrow immediately
-      if (msg.includes("429") || msg.includes("quota") || msg.includes("not found") || msg.includes("RESOURCE_EXHAUSTED")) {
+      if (isProbablyTransientGeminiError(msg)) {
         lastError = err;
         continue;
       }
@@ -272,31 +339,36 @@ function sleep(ms: number) {
 router.post("/analyze-receipt", async (req, res) => {
   const parseResult = AnalyzeReceiptBody.safeParse(req.body);
   if (!parseResult.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    const issue = parseResult.error.issues[0];
+    const detail = issue
+      ? `${issue.path.length ? issue.path.join(".") + ": " : ""}${issue.message}`
+      : "Invalid JSON body";
+    res.status(400).json({ error: `Invalid request — ${detail}` });
     return;
   }
 
   const { imageBase64, mimeType, sourceType, scannedAt } = parseResult.data;
+  const normalized = normalizeReceiptImage(imageBase64, mimeType);
+  if (!normalized.data || normalized.data.length < 80) {
+    res.status(400).json({
+      error: "Image data is missing or too small. Retake the photo or pick another image.",
+    });
+    return;
+  }
   const limits = getScanLimits();
 
   try {
     // Retry once on transient errors (rate-limit or first-request init glitch)
     let text: string;
     try {
-      text = await callGemini(imageBase64, mimeType, sourceType, limits);
+      text = await callGemini(normalized.data, normalized.mimeType, sourceType, limits);
     } catch (firstErr) {
       const firstMsg = firstErr instanceof Error ? firstErr.message : "";
-      const isTransient =
-        firstMsg.includes("429") ||
-        firstMsg.toLowerCase().includes("quota") ||
-        firstMsg.toLowerCase().includes("rate") ||
-        firstMsg.includes("GEMINI_API_KEY") ||
-        firstMsg.includes("AI_INTEGRATIONS_GEMINI_BASE_URL") ||
-        firstMsg.includes("AI_INTEGRATIONS_GEMINI_API_KEY"); // first-request lazy-init glitch
+      const isTransient = isProbablyTransientGeminiError(firstMsg);
       if (isTransient) {
         req.log.warn("Gemini transient error on first attempt, retrying after 2s...");
         await sleep(2000);
-        text = await callGemini(imageBase64, mimeType, sourceType, limits);
+        text = await callGemini(normalized.data, normalized.mimeType, sourceType, limits);
       } else {
         throw firstErr;
       }
@@ -320,8 +392,13 @@ router.post("/analyze-receipt", async (req, res) => {
 
     const validation = AnalyzeReceiptResponse.safeParse(parsed);
     if (!validation.success) {
+      const i0 = validation.error.issues[0];
       req.log.error({ parsed, issues: validation.error.issues }, "Gemini returned invalid shape");
-      res.status(500).json({ error: "AI returned an unexpected shape. Try again." });
+      res.status(500).json({
+        error: i0
+          ? `AI response was not usable (${i0.path.join(".") || "root"}: ${i0.message}). Try again with a clearer photo.`
+          : "AI returned an unexpected shape. Try again.",
+      });
       return;
     }
 

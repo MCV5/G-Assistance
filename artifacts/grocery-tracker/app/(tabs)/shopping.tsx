@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useMemo, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -10,16 +10,17 @@ import {
   Text,
   View,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AddItemModal } from "@/components/AddItemModal";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { SectionHeader } from "@/components/SectionHeader";
+import { SwipeRemoveAction } from "@/components/SwipeActions";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
-import { type Category, type ShoppingListItem } from "@/lib/types";
+import { type ShoppingListItem } from "@/lib/types";
 
 export default function ShoppingScreen() {
   const colors = useColors();
@@ -33,12 +34,6 @@ export default function ShoppingScreen() {
   } = usePantry();
   const [addOpen, setAddOpen] = useState(false);
 
-  const grouped = useMemo(() => {
-    const predicted = shoppingList.filter((s) => s.reason !== "manual");
-    const manual = shoppingList.filter((s) => s.reason === "manual");
-    return { predicted, manual };
-  }, [shoppingList]);
-
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 12;
   const checkedCount = shoppingList.filter((s) => s.checked).length;
@@ -46,7 +41,7 @@ export default function ShoppingScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <FlatList
-        data={[...grouped.predicted, ...grouped.manual]}
+        data={shoppingList}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{
           paddingTop: topPad,
@@ -62,7 +57,7 @@ export default function ShoppingScreen() {
                   Shopping list
                 </Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  Predicted from your habits, plus anything you add.
+                  Suggested restocks and items you add — one list, no duplicates.
                 </Text>
               </View>
               <Pressable
@@ -111,46 +106,24 @@ export default function ShoppingScreen() {
                 </Text>
               </Pressable>
             )}
-            {grouped.predicted.length > 0 && (
-              <View style={{ marginTop: 16, marginBottom: 8 }}>
-                <SectionHeader
-                  title="Predicted"
-                  caption="Based on how often you buy these"
-                />
-              </View>
-            )}
+            <View style={{ height: 8 }} />
           </View>
         }
-        renderItem={({ item, index }) => {
-          const showManualHeader =
-            item.reason === "manual" &&
-            (index === 0 ||
-              (index > 0 &&
-                shoppingList.filter((s) => s.reason !== "manual").length ===
-                  index));
-          return (
-            <View>
-              {showManualHeader && (
-                <View style={{ marginTop: 16, marginBottom: 8 }}>
-                  <SectionHeader title="Added by you" />
-                </View>
-              )}
-              <ShoppingRow
-                item={item}
-                onToggle={() => {
-                  if (Platform.OS !== "web") Haptics.selectionAsync();
-                  toggleShoppingItem(item.id);
-                }}
-                onRemove={() => removeShoppingItem(item.id)}
-              />
-            </View>
-          );
-        }}
+        renderItem={({ item }) => (
+          <SwipeableShoppingRow
+            item={item}
+            onToggle={() => {
+              if (Platform.OS !== "web") Haptics.selectionAsync();
+              toggleShoppingItem(item.id);
+            }}
+            onRemove={() => removeShoppingItem(item.id)}
+          />
+        )}
         ListEmptyComponent={
           <EmptyState
             icon="shopping-cart"
             title="Nothing to buy yet"
-            subtitle="Once we learn your habits, predicted restocks will appear here. Add anything else you need with the + button."
+            subtitle="When pantry items run low, we'll suggest them here. Tap + to add anything else."
           >
             <PrimaryButton
               label="Add an item"
@@ -175,7 +148,7 @@ export default function ShoppingScreen() {
   );
 }
 
-function ShoppingRow({
+function SwipeableShoppingRow({
   item,
   onToggle,
   onRemove,
@@ -184,27 +157,41 @@ function ShoppingRow({
   onToggle: () => void;
   onRemove: () => void;
 }) {
+  const swipeRef = useRef<Swipeable>(null);
+  return (
+    <Swipeable
+      ref={swipeRef}
+      friction={2}
+      leftThreshold={60}
+      renderLeftActions={() => <SwipeRemoveAction />}
+      onSwipeableLeftOpen={() => {
+        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        onRemove();
+      }}
+    >
+      <ShoppingRow item={item} onToggle={onToggle} />
+    </Swipeable>
+  );
+}
+
+function ShoppingRow({
+  item,
+  onToggle,
+}: {
+  item: ShoppingListItem;
+  onToggle: () => void;
+}) {
   const colors = useColors();
-  const reasonLabel = (() => {
-    switch (item.reason) {
-      case "predicted":
-        return "Restock soon";
-      case "expired":
-        return "Likely gone";
-      case "manual":
-        return "Added by you";
-    }
-  })();
+  const badgeLabel =
+    item.reason === "manual"
+      ? "You added"
+      : item.reason === "expired"
+        ? "Restock"
+        : "Suggested";
 
   return (
     <Pressable
       onPress={onToggle}
-      onLongPress={() =>
-        Alert.alert(item.name, "Remove this from your list?", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Remove", style: "destructive", onPress: onRemove },
-        ])
-      }
       style={({ pressed }) => [
         styles.row,
         {
@@ -245,7 +232,7 @@ function ShoppingRow({
           {item.name}
         </Text>
         <Text style={[styles.rowMeta, { color: colors.mutedForeground }]}>
-          {reasonLabel} · {item.category}
+          {badgeLabel} · {item.category}
         </Text>
       </View>
     </Pressable>

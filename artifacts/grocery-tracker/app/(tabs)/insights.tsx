@@ -11,16 +11,15 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { EmptyState } from "@/components/EmptyState";
-import { PrimaryButton } from "@/components/PrimaryButton";
+import { boldTheme as D } from "@/constants/colors";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
 import { buildInsightModel, type InsightBarMetric } from "@/lib/insightRules";
 import type { Category } from "@/lib/types";
 
-function clampPct(v: number) {
-  return Math.max(0, Math.min(100, Math.round(v)));
-}
+const MIN_SCANS = 3;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function scoreLabel(score: number) {
   if (score >= 75) return "Great basket";
@@ -28,58 +27,66 @@ function scoreLabel(score: number) {
   return "Needs work";
 }
 
-function barStatus(metric: InsightBarMetric): "Good" | "OK" | "Low" {
+function scoreSub(score: number) {
+  if (score >= 75) return "High variety, good fresh coverage this week.";
+  if (score >= 55) return "Good balance. A bit more produce would help.";
+  return "Low variety detected. Add more fresh and whole foods.";
+}
+
+function barStatusLabel(metric: InsightBarMetric): string {
   const v = metric.invert ? 100 - metric.value : metric.value;
-  if (v >= 65) return "Good";
-  if (v >= 40) return "OK";
-  return "Low";
+  if (v >= 65) return "High ✓";
+  if (v >= 40) return "Good ✓";
+  if (v >= 20) return "OK";
+  return metric.invert ? "Good ✓" : "Low";
+}
+
+function barStatusColor(metric: InsightBarMetric): string {
+  const v = metric.invert ? 100 - metric.value : metric.value;
+  if (v >= 65) return "#2D7A3A";
+  if (v >= 40) return "#2D7A3A";
+  if (v >= 20) return D.inkMid;
+  return metric.invert ? "#2D7A3A" : "#B85C00";
 }
 
 function spotlightText(category: Category) {
-  if (category === "Fruit" || category === "Vegetables") {
-    return "High in fiber and micronutrients. Great for daily balance.";
-  }
-  if (category === "Meat" || category === "Dairy") {
+  if (category === "Fruit" || category === "Vegetables")
+    return "High in fibre and micronutrients. Great for daily balance.";
+  if (category === "Meat")
+    return "Complete protein. High in B12, iron, and zinc.";
+  if (category === "Dairy")
     return "Solid protein source for satiety and recovery.";
-  }
-  if (category === "Prepared") {
+  if (category === "Prepared")
     return "Convenient choice. Pair with produce to improve balance.";
-  }
+  if (category === "Bakery")
+    return "Choose whole grain options for more fibre and slower energy.";
   return "Useful pantry staple when paired with whole foods.";
 }
 
-function DeltaChip({
-  label,
-  value,
-  suffix,
-  colors,
-  invert = false,
-}: {
-  label: string;
-  value: number;
-  suffix: string;
-  colors: ReturnType<typeof useColors>;
-  invert?: boolean;
-}) {
-  const effective = invert ? -value : value;
-  const trend: "up" | "down" | "flat" =
-    effective > 0 ? "up" : effective < 0 ? "down" : "flat";
-  const icon = trend === "up" ? "trending-up" : trend === "down" ? "trending-down" : "minus";
-  const fg =
-    trend === "up" ? "#1b6a3a" : trend === "down" ? "#8a5600" : colors.mutedForeground;
-  const bg = trend === "up" ? "#e8f7ee" : trend === "down" ? "#fff4db" : `${colors.mutedForeground}22`;
-  const sign = value > 0 ? "+" : "";
+// Sample model used for the locked preview so new users see compelling content
+const PREVIEW_MODEL = {
+  score: 72,
+  scoreDelta: 8,
+  freshDelta: 14,
+  preparedDelta: -5,
+  organicShare: 0,
+  organicDelta: 0,
+  bars: [
+    { key: "whole_foods", label: "Whole foods",       value: 70, invert: false },
+    { key: "protein",     label: "Protein sources",   value: 55, invert: false },
+    { key: "fiber",       label: "Fiber-friendly",    value: 48, invert: false },
+    { key: "convenience", label: "Convenience foods", value: 22, invert: true  },
+  ] as InsightBarMetric[],
+  benefits: ["Calcium", "Protein", "Whole grains", "Fibre", "Vitamin C"],
+  spotlight: [
+    { id: "p1", name: "Eggs",   category: "Dairy"      as Category },
+    { id: "p2", name: "Spinach", category: "Vegetables" as Category },
+  ],
+  action: "Add more leafy greens or fruit to boost your fibre score this week.",
+  confidence: { label: "High confidence", note: "" },
+};
 
-  return (
-    <View style={[styles.deltaChip, { backgroundColor: bg }]}>
-      <Text style={[styles.deltaChipLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <View style={styles.deltaChipMain}>
-        <Feather name={icon} size={12} color={fg} />
-        <Text style={[styles.deltaChipValue, { color: fg }]}>{`${sign}${value}${suffix}`}</Text>
-      </View>
-    </View>
-  );
-}
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function InsightsScreen() {
   const colors = useColors();
@@ -88,416 +95,459 @@ export default function InsightsScreen() {
   const { pantry, scans } = usePantry();
 
   const isWeb = Platform.OS === "web";
-  const topPad = isWeb ? 67 : insets.top + 16;
+  const topPad = isWeb ? 0 : insets.top;
 
-  const model = useMemo(() => buildInsightModel(pantry, scans), [pantry, scans]);
+  const hasEnoughData = scans.length >= MIN_SCANS;
+
+  const liveModel = useMemo(
+    () => (hasEnoughData ? buildInsightModel(pantry, scans) : null),
+    [pantry, scans, hasEnoughData],
+  );
+
+  const model = liveModel ?? PREVIEW_MODEL;
+
+  const wasteStats = useMemo(() => {
+    const cutoff = Date.now() - 30 * 86400000;
+    const wasted = pantry.filter(
+      (p) => p.wasWasted && p.wastedAt && new Date(p.wastedAt).getTime() > cutoff,
+    );
+    return { wastedCount: wasted.length, wastedItems: wasted.slice(0, 3) };
+  }, [pantry]);
+
+  // Top item for PRO upsell headline
+  const topItemName = pantry
+    .filter((p) => !p.consumed)
+    .sort((a, b) => (b.purchaseCount ?? 1) - (a.purchaseCount ?? 1))[0]?.name ?? "your items";
 
   return (
     <ScrollView
-      style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{
-        paddingTop: topPad,
-        paddingHorizontal: 20,
-        paddingBottom: insets.bottom + 120,
-      }}
+      style={{ flex: 1, backgroundColor: D.cream }}
+      contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.title, { color: colors.foreground }]}>Insights</Text>
-      <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-        Visual nutrition snapshots from your pantry habits.
-      </Text>
-
-      {pantry.length > 0 ? (
-        <View
-          style={[
-            styles.snapshot,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View
-            style={[
-              styles.hero,
-              { backgroundColor: `${colors.primary}16`, borderColor: colors.border },
-            ]}
-          >
-            <View
-              style={[
-                styles.scoreRing,
-                { borderColor: colors.primary, backgroundColor: colors.background },
-              ]}
-            >
-              <Text style={[styles.scoreValue, { color: colors.foreground }]}>
-                {model.score}
-              </Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.scoreTitle, { color: colors.foreground }]}>
-                This week's basket score
-              </Text>
-              <Text style={[styles.scoreLabel, { color: colors.primary }]}>
-                {scoreLabel(model.score)}
-              </Text>
-              <Text style={[styles.scoreSub, { color: colors.mutedForeground }]}>
-                Based on items currently in your pantry.
-              </Text>
-              <View
-                style={[
-                  styles.confidencePill,
-                  {
-                    backgroundColor:
-                      model.confidence.label === "High confidence"
-                        ? `${colors.success}22`
-                        : model.confidence.label === "Medium confidence"
-                          ? "#fff4db"
-                          : `${colors.mutedForeground}22`,
-                  },
-                ]}
-              >
-                <Feather
-                  name="shield"
-                  size={11}
-                  color={
-                    model.confidence.label === "High confidence"
-                      ? colors.success
-                      : model.confidence.label === "Medium confidence"
-                        ? "#8a5600"
-                        : colors.mutedForeground
-                  }
-                />
-                <Text
-                  style={[
-                    styles.confidenceText,
-                    {
-                      color:
-                        model.confidence.label === "High confidence"
-                          ? colors.success
-                          : model.confidence.label === "Medium confidence"
-                            ? "#8a5600"
-                            : colors.mutedForeground,
-                    },
-                  ]}
-                >
-                  {model.confidence.label}
-                </Text>
-              </View>
-            </View>
+      {/* ── Header band ── */}
+      <View style={[s.header, { paddingTop: topPad + 20 }]}>
+        <Text style={s.headerEyebrow}>YOUR HEALTH</Text>
+        <View style={s.headerRow}>
+          <Text style={s.headerTitle}>INSIGHTS.</Text>
+          <View style={s.freeBadge}>
+            <Text style={s.freeBadgeTxt}>FREE</Text>
           </View>
-
-          <View style={styles.deltaRow}>
-            <DeltaChip label="Score" value={model.scoreDelta} suffix=" pts" colors={colors} />
-            <DeltaChip label="Fresh" value={model.freshDelta} suffix=" pp" colors={colors} />
-            <DeltaChip
-              label="Prepared"
-              value={model.preparedDelta}
-              suffix=" pp"
-              colors={colors}
-              invert
-            />
-          </View>
-
-          <View
-            style={[
-              styles.organicCard,
-              { backgroundColor: colors.background, borderColor: colors.border },
-            ]}
-          >
-            <View>
-              <Text style={[styles.organicLabel, { color: colors.mutedForeground }]}>
-                Organic share
-              </Text>
-              <Text style={[styles.organicValue, { color: colors.foreground }]}>
-                {model.organicShare}%
-              </Text>
-            </View>
-            <DeltaChip
-              label="vs last week"
-              value={model.organicDelta}
-              suffix=" pp"
-              colors={colors}
-            />
-          </View>
-
-          <Text style={[styles.snapshotLabel, { color: colors.foreground }]}>Nutrition snapshot</Text>
-          <View style={{ gap: 9 }}>
-            {model.bars.map((metric) => (
-              <View key={metric.key}>
-                <View style={styles.barHead}>
-                  <Text style={[styles.barLabel, { color: colors.foreground }]}>
-                    {metric.label}
-                  </Text>
-                  <Text style={[styles.barStatus, { color: colors.mutedForeground }]}>
-                    {barStatus(metric)}
-                  </Text>
-                </View>
-                <View style={[styles.barTrack, { backgroundColor: colors.muted }]}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      {
-                        width: `${Math.max(4, clampPct(metric.value))}%`,
-                        backgroundColor: metric.invert ? "#cc8f2a" : colors.primary,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-
-          <Text style={[styles.snapshotLabel, { color: colors.foreground, marginTop: 14 }]}>
-            Benefits in your pantry
-          </Text>
-          <View style={styles.chips}>
-            {model.benefits.length > 0 ? (
-              model.benefits.map((chip) => (
-                <View
-                  key={chip}
-                  style={[
-                    styles.chip,
-                    { backgroundColor: colors.background, borderColor: colors.border },
-                  ]}
-                >
-                  <Text style={[styles.chipText, { color: colors.foreground }]}>{chip}</Text>
-                </View>
-              ))
-            ) : (
-              <Text style={[styles.snapshotHint, { color: colors.mutedForeground }]}>
-                Add a few more category types to unlock benefit tags.
-              </Text>
-            )}
-          </View>
-
-          {model.spotlight.length > 0 ? (
-            <View style={{ marginTop: 14, gap: 8 }}>
-              <Text style={[styles.snapshotLabel, { color: colors.foreground }]}>Item spotlight</Text>
-              {model.spotlight.map((s) => (
-                <View
-                  key={s.id}
-                  style={[
-                    styles.spotlightCard,
-                    { backgroundColor: colors.background, borderColor: colors.border },
-                  ]}
-                >
-                  <View style={styles.spotlightHead}>
-                    <Text style={[styles.spotlightName, { color: colors.foreground }]}>{s.name}</Text>
-                    <Text style={[styles.spotlightCat, { color: colors.mutedForeground }]}>
-                      {s.category}
-                    </Text>
-                  </View>
-                  <Text style={[styles.spotlightBody, { color: colors.mutedForeground }]}>
-                    {spotlightText(s.category)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          <View
-            style={[
-              styles.actionCard,
-              { backgroundColor: `${colors.primary}12`, borderColor: `${colors.primary}40` },
-            ]}
-          >
-            <Text style={[styles.actionTitle, { color: colors.primary }]}>
-              Improve this week
-            </Text>
-            <Text style={[styles.actionBody, { color: colors.foreground }]}>
-              {model.action}
-            </Text>
-          </View>
-
-          <Text style={[styles.snapshotHint, { color: colors.mutedForeground }]}>
-            {model.confidence.note} Directional estimate from pantry category data, not medical advice.
-          </Text>
         </View>
-      ) : (
-        <View style={{ marginTop: 8 }}>
-          <EmptyState
-            icon="heart"
-            title="Add a few items first"
-            subtitle="Scan receipts or add pantry items so we can summarize patterns for health insights."
+        <Text style={s.headerSub}>Based on items in your pantry</Text>
+      </View>
+
+      {/* ── Content area (preview + optional overlay) ── */}
+      <View style={s.contentWrap}>
+        {/* Always-rendered content — dimmed when locked */}
+        <View
+          // @ts-ignore — pointerEvents as prop is valid in RN
+          pointerEvents={hasEnoughData ? "auto" : "none"}
+          style={{ opacity: hasEnoughData ? 1 : 0.13 }}
+        >
+          <InsightsContent
+            model={model}
+            wasteStats={wasteStats}
+            topItemName={topItemName}
+            colors={colors}
           />
         </View>
-      )}
 
-      <Text
-        style={[styles.sectionLabel, { color: colors.mutedForeground, marginTop: 28 }]}
-      >
-        RELATED
-      </Text>
-      <Pressable
-        onPress={() => router.push("/activity")}
-        style={({ pressed }) => [
-          styles.linkRow,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            opacity: pressed ? 0.85 : 1,
-          },
-        ]}
-      >
-        <Feather name="bar-chart-2" size={20} color={colors.primary} />
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.linkTitle, { color: colors.foreground }]}>
-            Shopping activity
-          </Text>
-          <Text style={[styles.linkSub, { color: colors.mutedForeground }]}>
-            Restock predictions, most-bought items, and category mix
-          </Text>
-        </View>
-        <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-      </Pressable>
-
-      <View style={{ marginTop: 20 }}>
-        <PrimaryButton
-          label="Open shopping activity"
-          icon="bar-chart-2"
-          variant="secondary"
-          fullWidth
-          size="lg"
-          onPress={() => router.push("/activity")}
-        />
+        {/* Lock overlay — only shown when not enough scans */}
+        {!hasEnoughData && (
+          <View style={s.lockOverlay}>
+            <View style={s.lockCard}>
+              <View style={[s.lockRing, { borderColor: D.greenMid }]}>
+                <Text style={[s.lockCount, { color: D.greenMid }]}>
+                  {scans.length}/{MIN_SCANS}
+                </Text>
+              </View>
+              <Text style={s.lockTitle}>
+                {MIN_SCANS - scans.length} more scan{MIN_SCANS - scans.length === 1 ? "" : "s"} to unlock
+              </Text>
+              <Text style={s.lockSub}>
+                Insights builds a picture of your eating habits from real shopping history. Scan {MIN_SCANS} receipts to unlock.
+              </Text>
+              <Pressable
+                style={s.lockBtn}
+                onPress={() => router.push("/(tabs)/scan")}
+              >
+                <Feather name="camera" size={15} color={D.cream} />
+                <Text style={s.lockBtnTxt}>Scan a receipt</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  title: {
+// ─── InsightsContent ──────────────────────────────────────────────────────────
+
+function InsightsContent({
+  model,
+  wasteStats,
+  topItemName,
+  colors,
+}: {
+  model: typeof PREVIEW_MODEL;
+  wasteStats: { wastedCount: number; wastedItems: Array<{ id: string; name: string }> };
+  topItemName: string;
+  colors: ReturnType<typeof useColors>;
+}) {
+  return (
+    <View style={s.content}>
+      {/* ── Score card ── */}
+      <View style={s.scoreCard}>
+        <Text style={s.scoreSectionLabel}>THIS WEEK'S BASKET SCORE</Text>
+        <View style={s.scoreBody}>
+          <View style={s.scoreRingWrap}>
+            <View style={s.scoreRing}>
+              <Text style={s.scoreNum}>{model.score}</Text>
+            </View>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.scoreLabel}>{scoreLabel(model.score)}</Text>
+            <Text style={s.scoreSubTxt}>{scoreSub(model.score)}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* ── Nutrition snapshot ── */}
+      <Text style={s.sectionLabel}>NUTRITION SNAPSHOT</Text>
+      <View style={[s.card, { gap: 10 }]}>
+        {model.bars.map((metric) => (
+          <View key={metric.key} style={s.barRow}>
+            <Text style={s.barLabel}>{metric.label}</Text>
+            <View style={s.barTrack}>
+              <View
+                style={[
+                  s.barFill,
+                  {
+                    width: `${Math.max(4, Math.min(100, Math.round(metric.value)))}%`,
+                    backgroundColor: metric.invert ? D.amber : D.greenMid,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={[s.barStatus, { color: barStatusColor(metric) }]}>
+              {barStatusLabel(metric)}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* ── Benefits ── */}
+      <Text style={s.sectionLabel}>BENEFITS IN YOUR PANTRY</Text>
+      <View style={s.chips}>
+        {model.benefits.map((chip) => (
+          <View key={chip} style={s.chip}>
+            <Text style={s.chipTxt}>{chip.toUpperCase()}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* ── Item spotlight ── */}
+      {model.spotlight.length > 0 && (
+        <>
+          <Text style={s.sectionLabel}>ITEM SPOTLIGHT</Text>
+          <View style={{ gap: 8 }}>
+            {model.spotlight.map((sp) => (
+              <View key={sp.id} style={s.spotlightCard}>
+                <View style={s.spotlightHead}>
+                  <Text style={s.spotlightName}>{sp.name}</Text>
+                  <Text style={s.spotlightCat}>{sp.category.toUpperCase()}</Text>
+                </View>
+                <Text style={s.spotlightBody}>{spotlightText(sp.category)}</Text>
+              </View>
+            ))}
+          </View>
+        </>
+      )}
+
+      {/* ── Food waste ── */}
+      <View style={[s.wasteCard, wasteStats.wastedCount > 0 && s.wasteCardAlert]}>
+        <View style={s.wasteHead}>
+          <Feather
+            name="trash-2"
+            size={13}
+            color={wasteStats.wastedCount > 0 ? "#c0392b" : D.inkLight}
+          />
+          <Text style={[s.wasteTitleTxt, wasteStats.wastedCount > 0 && { color: "#c0392b" }]}>
+            Food waste · last 30 days
+          </Text>
+          <Text style={[s.wasteCountTxt, wasteStats.wastedCount > 0 && { color: "#c0392b" }]}>
+            {wasteStats.wastedCount} item{wasteStats.wastedCount === 1 ? "" : "s"}
+          </Text>
+        </View>
+        {wasteStats.wastedCount === 0 ? (
+          <Text style={s.wasteNone}>
+            No waste recorded. Tap "It Was Wasted" on any pantry item to track it.
+          </Text>
+        ) : (
+          wasteStats.wastedItems.map((w) => (
+            <Text key={w.id} style={s.wasteItemTxt}>· {w.name}</Text>
+          ))
+        )}
+      </View>
+
+      {/* ── Improve this week ── */}
+      <View style={s.actionCard}>
+        <Text style={s.actionLabel}>IMPROVE THIS WEEK</Text>
+        <Text style={s.actionBody}>{model.action}</Text>
+      </View>
+
+      {/* ── PRO feature upsell ── */}
+      <View style={s.proCard}>
+        <Text style={s.proLabel}>PRO FEATURE</Text>
+        <Text style={s.proTitle}>
+          You bought {topItemName} — here's what to make.
+        </Text>
+        <Text style={s.proBody}>
+          Get personalised recipes based on exactly what's in your pantry right now.
+        </Text>
+        <Pressable style={s.proBtn}>
+          <Text style={s.proBtnTxt}>UNLOCK PRO  →</Text>
+        </Pressable>
+      </View>
+
+      {/* ── Shopping journey (Pro teaser) ── */}
+      <View style={s.journeyCard}>
+        <Text style={s.journeyLabel}>PRO · COMING SOON</Text>
+        <Text style={s.journeyTitle}>Your shopping journey</Text>
+        <Text style={s.journeyBody}>
+          A timeline of scans, restocks, what you finished vs. wasted, and how your basket evolves week to week — all in one story you can actually learn from.
+        </Text>
+        <View style={s.journeyLockRow}>
+          <Feather name="lock" size={14} color={D.inkLight} />
+          <Text style={s.journeyLockTxt}>Included with Pro</Text>
+        </View>
+      </View>
+
+      <Text style={s.disclaimer}>
+        Directional estimates from pantry category data, not medical advice.
+      </Text>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  // Header band
+  header: {
+    backgroundColor: D.greenMid,
+    paddingHorizontal: 22,
+    paddingBottom: 22,
+  },
+  headerEyebrow: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 2,
+    color: "rgba(168,201,127,0.7)",
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 4,
+  },
+  headerTitle: {
     fontFamily: "Inter_700Bold",
-    fontSize: 28,
+    fontSize: 30,
+    color: D.cream,
     letterSpacing: -0.5,
   },
-  subtitle: {
+  freeBadge: {
+    backgroundColor: "rgba(168,201,127,0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(168,201,127,0.4)",
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  freeBadgeTxt: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
+    color: D.greenLight,
+    letterSpacing: 1,
+  },
+  headerSub: {
     fontFamily: "Inter_400Regular",
-    fontSize: 14,
-    marginTop: 4,
-    marginBottom: 14,
+    fontSize: 13,
+    color: "rgba(197,220,168,0.75)",
+  },
+
+  // Content + lock overlay
+  contentWrap: {
+    position: "relative",
+  },
+  content: {
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    gap: 0,
+  },
+  lockOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-start",
+    alignItems: "center",
+    paddingTop: 40,
+    paddingHorizontal: 20,
+  },
+  lockCard: {
+    width: "100%",
+    backgroundColor: D.cream,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    padding: 24,
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  lockRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 3,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  lockCount: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 20,
+  },
+  lockTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 18,
+    color: D.inkBlack,
+    textAlign: "center",
+  },
+  lockSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: D.inkMid,
+    textAlign: "center",
     lineHeight: 19,
   },
-  snapshot: {
-    marginTop: 8,
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-  },
-  hero: {
+  lockBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 14,
-  },
-  deltaRow: {
-    flexDirection: "row",
     gap: 8,
+    backgroundColor: D.greenMid,
+    paddingVertical: 13,
+    paddingHorizontal: 28,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  lockBtnTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: D.cream,
+  },
+
+  // Score card (dark green)
+  scoreCard: {
+    backgroundColor: D.greenMid,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 22,
+  },
+  scoreSectionLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: "rgba(168,201,127,0.7)",
+    textTransform: "uppercase",
     marginBottom: 12,
   },
-  deltaChip: {
-    flex: 1,
-    borderRadius: 10,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    gap: 2,
-  },
-  deltaChipLabel: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 10,
-  },
-  deltaChipMain: {
+  scoreBody: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 14,
   },
-  deltaChipValue: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 12,
-  },
-  organicCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-  organicLabel: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-  },
-  organicValue: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 24,
-    marginTop: 2,
-  },
-  scoreRing: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    borderWidth: 1,
+  scoreRingWrap: {
     alignItems: "center",
     justifyContent: "center",
   },
-  scoreValue: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 28,
+  scoreRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 3,
+    borderColor: D.greenLight,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.15)",
   },
-  scoreTitle: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+  scoreNum: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 26,
+    color: D.cream,
   },
   scoreLabel: {
-    marginTop: 2,
     fontFamily: "Inter_700Bold",
-    fontSize: 22,
+    fontSize: 20,
+    color: D.cream,
+    letterSpacing: -0.3,
+    marginBottom: 4,
   },
-  scoreSub: {
+  scoreSubTxt: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    marginTop: 1,
+    color: "rgba(197,220,168,0.8)",
     lineHeight: 17,
   },
-  confidencePill: {
-    marginTop: 6,
-    alignSelf: "flex-start",
+
+  // Section label
+  sectionLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.inkLight,
+    textTransform: "uppercase",
+    marginBottom: 10,
+    marginTop: 4,
+  },
+
+  // Card wrapper
+  card: {
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+  },
+
+  // Bars
+  barRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    borderRadius: 999,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-  },
-  confidenceText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 10.5,
-  },
-  snapshotLabel: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 12,
-    marginBottom: 6,
-  },
-  barHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    gap: 8,
   },
   barLabel: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-  },
-  barStatus: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
+    color: D.inkBlack,
+    width: 110,
   },
   barTrack: {
-    height: 8,
+    flex: 1,
+    height: 7,
+    backgroundColor: D.creamBorder,
     borderRadius: 4,
     overflow: "hidden",
   },
@@ -505,92 +555,225 @@ const styles = StyleSheet.create({
     height: "100%",
     borderRadius: 4,
   },
+  barStatus: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 10,
+    width: 52,
+    textAlign: "right",
+  },
+
+  // Benefit chips
   chips: {
     flexDirection: "row",
-    gap: 8,
     flexWrap: "wrap",
+    gap: 7,
+    marginBottom: 20,
   },
   chip: {
+    backgroundColor: D.creamDark,
     borderWidth: 1,
+    borderColor: D.creamBorder,
     borderRadius: 999,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 5,
   },
-  chipText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
+  chipTxt: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 10,
+    color: D.greenMid,
+    letterSpacing: 0.5,
   },
+
+  // Spotlight
   spotlightCard: {
+    backgroundColor: D.creamDark,
     borderWidth: 1,
+    borderColor: D.creamBorder,
     borderRadius: 12,
-    padding: 10,
+    padding: 12,
+    marginBottom: 8,
   },
   spotlightHead: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 10,
+    marginBottom: 5,
   },
   spotlightName: {
-    flex: 1,
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    fontSize: 15,
+    color: D.inkBlack,
   },
   spotlightCat: {
     fontFamily: "Inter_500Medium",
-    fontSize: 11,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: D.inkLight,
   },
   spotlightBody: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    marginTop: 5,
+    color: D.greenMid,
     lineHeight: 17,
   },
-  actionCard: {
-    marginTop: 12,
-    borderRadius: 12,
+
+  // Waste card
+  wasteCard: {
+    backgroundColor: D.creamDark,
     borderWidth: 1,
-    padding: 10,
+    borderColor: D.creamBorder,
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+    marginBottom: 20,
+    marginTop: 12,
   },
-  actionTitle: {
+  wasteCardAlert: {
+    backgroundColor: "#fff0ee",
+    borderColor: "#c0392b44",
+  },
+  wasteHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  wasteTitleTxt: {
+    flex: 1,
     fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
+    fontSize: 12,
+    color: D.inkMid,
+  },
+  wasteCountTxt: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    color: D.inkMid,
+  },
+  wasteNone: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.inkLight,
+    lineHeight: 17,
+  },
+  wasteItemTxt: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: "#c0392b",
+  },
+
+  // Improve this week
+  actionCard: {
+    backgroundColor: `${D.greenMid}14`,
+    borderWidth: 1,
+    borderColor: `${D.greenMid}30`,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 20,
+  },
+  actionLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.greenMid,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 3,
+    marginBottom: 4,
   },
   actionBody: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
+    color: D.inkBlack,
     lineHeight: 19,
   },
-  snapshotHint: {
+
+  // PRO upsell
+  proCard: {
+    borderWidth: 1.5,
+    borderColor: D.creamBorder,
+    borderStyle: "dashed",
+    borderRadius: 14,
+    padding: 16,
+    gap: 6,
+    marginBottom: 20,
+  },
+  proLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.inkLight,
+    textTransform: "uppercase",
+  },
+  proTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: D.inkBlack,
+    lineHeight: 22,
+  },
+  proBody: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    marginTop: 10,
+    color: D.inkMid,
     lineHeight: 17,
   },
-  sectionLabel: {
-    fontFamily: "Inter_600SemiBold",
+  proBtn: {
+    alignSelf: "flex-start",
+    backgroundColor: D.greenMid,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 4,
+  },
+  proBtnTxt: {
+    fontFamily: "Inter_700Bold",
     fontSize: 11,
-    letterSpacing: 0.6,
-    marginBottom: 8,
+    color: D.cream,
+    letterSpacing: 1,
   },
-  linkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
+
+  journeyCard: {
     borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 14,
+    padding: 16,
+    gap: 6,
+    marginBottom: 20,
+    backgroundColor: `${D.greenMid}08`,
   },
-  linkTitle: {
+  journeyLabel: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 15,
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.inkLight,
+    textTransform: "uppercase",
   },
-  linkSub: {
+  journeyTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: D.inkBlack,
+  },
+  journeyBody: {
     fontFamily: "Inter_400Regular",
     fontSize: 12,
-    marginTop: 2,
+    color: D.inkMid,
+    lineHeight: 18,
+  },
+  journeyLockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+  },
+  journeyLockTxt: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    color: D.inkLight,
+  },
+
+  disclaimer: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: D.inkLight,
+    textAlign: "center",
+    lineHeight: 16,
+    marginBottom: 8,
   },
 });

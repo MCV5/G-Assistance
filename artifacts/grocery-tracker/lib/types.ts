@@ -53,6 +53,9 @@ export interface PantryItem {
   purchases: Purchase[];
   averageDaysBetweenPurchases: number | null;
   consumed: boolean;
+  wasWasted?: boolean;
+  wastedAt?: string;
+  purchaseCount?: number;
 }
 
 export interface ScanRecord {

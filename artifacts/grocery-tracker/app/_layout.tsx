@@ -19,13 +19,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PantryProvider } from "@/contexts/PantryContext";
+import { getApiBaseUrl } from "@/lib/apiBase";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
 SplashScreen.preventAutoHideAsync();
 
-const _apiBase =
-  process.env.EXPO_PUBLIC_API_URL ||
-  (process.env.EXPO_PUBLIC_DOMAIN ? `https://${process.env.EXPO_PUBLIC_DOMAIN}` : null);
+const _apiBase = getApiBaseUrl();
 if (_apiBase) {
   setBaseUrl(_apiBase);
 }
@@ -114,10 +113,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#F5F1E8",
+          backgroundColor: "#F2EFE6",
         }}
       >
-        <ActivityIndicator color="#2D5016" />
+        <ActivityIndicator color="#2D4A1E" />
       </View>
     );
   }

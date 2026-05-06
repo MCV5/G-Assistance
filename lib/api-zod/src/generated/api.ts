@@ -86,6 +86,8 @@ export const SignupBody = zod.object({
   lastName: zod.string().optional(),
 });
 
+export const signupResponseUserHouseholdSizeMax = 8;
+
 export const SignupResponse = zod.object({
   user: zod.object({
     id: zod.string(),
@@ -93,6 +95,11 @@ export const SignupResponse = zod.object({
     firstName: zod.string().nullable(),
     lastName: zod.string().nullable(),
     profileImageUrl: zod.string().url().nullable(),
+    createdAt: zod.coerce.date().describe("Account creation time (ISO 8601)."),
+    dietaryGoals: zod
+      .array(zod.string())
+      .describe("Saved dietary tags (subset of app-defined options)."),
+    householdSize: zod.number().min(1).max(signupResponseUserHouseholdSizeMax),
   }),
   token: zod.string(),
   recoveryCode: zod
@@ -111,6 +118,8 @@ export const LoginBody = zod.object({
   password: zod.string().min(1),
 });
 
+export const loginResponseUserHouseholdSizeMax = 8;
+
 export const LoginResponse = zod.object({
   user: zod.object({
     id: zod.string(),
@@ -118,6 +127,11 @@ export const LoginResponse = zod.object({
     firstName: zod.string().nullable(),
     lastName: zod.string().nullable(),
     profileImageUrl: zod.string().url().nullable(),
+    createdAt: zod.coerce.date().describe("Account creation time (ISO 8601)."),
+    dietaryGoals: zod
+      .array(zod.string())
+      .describe("Saved dietary tags (subset of app-defined options)."),
+    householdSize: zod.number().min(1).max(loginResponseUserHouseholdSizeMax),
   }),
   token: zod.string(),
 });
@@ -177,6 +191,8 @@ export const GetCurrentAuthUserHeader = zod.object({
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
+export const getCurrentAuthUserResponseUserOneHouseholdSizeMax = 8;
+
 export const GetCurrentAuthUserResponse = zod.object({
   user: zod.union([
     zod.object({
@@ -185,6 +201,16 @@ export const GetCurrentAuthUserResponse = zod.object({
       firstName: zod.string().nullable(),
       lastName: zod.string().nullable(),
       profileImageUrl: zod.string().url().nullable(),
+      createdAt: zod.coerce
+        .date()
+        .describe("Account creation time (ISO 8601)."),
+      dietaryGoals: zod
+        .array(zod.string())
+        .describe("Saved dietary tags (subset of app-defined options)."),
+      householdSize: zod
+        .number()
+        .min(1)
+        .max(getCurrentAuthUserResponseUserOneHouseholdSizeMax),
     }),
     zod.null(),
   ]),
@@ -226,4 +252,35 @@ export const PutMyStoreResponse = zod.object({
   pantry: zod.array(zod.record(zod.string(), zod.unknown())),
   scans: zod.array(zod.record(zod.string(), zod.unknown())),
   shoppingList: zod.array(zod.record(zod.string(), zod.unknown())),
+});
+
+/**
+ * @summary Update dietary goals and household size
+ */
+export const PatchMyProfileHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const patchMyProfileBodyHouseholdSizeMax = 8;
+
+export const PatchMyProfileBody = zod.object({
+  dietaryGoals: zod.array(zod.string()).optional(),
+  householdSize: zod
+    .number()
+    .min(1)
+    .max(patchMyProfileBodyHouseholdSizeMax)
+    .optional(),
+});
+
+export const patchMyProfileResponseHouseholdSizeMax = 8;
+
+export const PatchMyProfileResponse = zod.object({
+  dietaryGoals: zod.array(zod.string()),
+  householdSize: zod
+    .number()
+    .min(1)
+    .max(patchMyProfileResponseHouseholdSizeMax),
 });

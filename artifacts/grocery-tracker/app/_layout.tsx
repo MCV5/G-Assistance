@@ -68,13 +68,7 @@ function RootLayoutNav() {
           headerShown: true,
         }}
       />
-      <Stack.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-          headerShown: true,
-        }}
-      />
+      <Stack.Screen name="profile" options={{ headerShown: false }} />
     </Stack>
   );
 }

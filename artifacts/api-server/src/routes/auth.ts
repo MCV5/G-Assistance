@@ -112,16 +112,64 @@ function getResetEmailTemplate(link: string): { text: string; html: string } {
   return { text, html };
 }
 
+function getMailFrom(): string | undefined {
+  return process.env.SMTP_FROM || process.env.EMAIL_FROM;
+}
+
+async function sendResetEmailViaResend(
+  to: string,
+  template: ReturnType<typeof getResetEmailTemplate>,
+): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = getMailFrom();
+  if (!apiKey || !from) {
+    throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
+  }
+
+  const subject = `Reset your ${process.env.APP_NAME || "Grocery Tracker"} password`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text: template.text,
+      html: template.html,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as { message?: string };
+  if (!res.ok) {
+    throw new Error(body?.message || `Resend error: ${res.status}`);
+  }
+}
+
 async function sendResetEmail(email: string, link: string): Promise<boolean> {
-  if (!process.env.SMTP_URL || !process.env.SMTP_FROM) {
+  const template = getResetEmailTemplate(link);
+
+  if (process.env.RESEND_API_KEY && getMailFrom()) {
+    try {
+      await sendResetEmailViaResend(email, template);
+      return true;
+    } catch (err) {
+      console.error("[auth] Resend send failed:", err);
+      console.info(`[auth] password reset link for ${email}: ${link}`);
+      return false;
+    }
+  }
+
+  if (!process.env.SMTP_URL || !getMailFrom()) {
     console.info(`[auth] password reset link for ${email}: ${link}`);
     return false;
   }
 
   const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-  const template = getResetEmailTemplate(link);
   await transporter.sendMail({
-    from: process.env.SMTP_FROM,
+    from: getMailFrom(),
     to: email,
     subject: `Reset your ${process.env.APP_NAME || "Grocery Tracker"} password`,
     text: template.text,
@@ -137,15 +185,27 @@ function publicUser(row: typeof usersTable.$inferSelect) {
     firstName: row.firstName,
     lastName: row.lastName,
     profileImageUrl: row.profileImageUrl,
+    createdAt: row.createdAt,
   };
 }
 
-router.get("/auth/user", (req: Request, res: Response) => {
-  res.json(
-    GetCurrentAuthUserResponse.parse({
-      user: req.isAuthenticated() ? req.user : null,
-    }),
-  );
+router.get("/auth/user", async (req: Request, res: Response) => {
+  if (!req.isAuthenticated()) {
+    res.json(GetCurrentAuthUserResponse.parse({ user: null }));
+    return;
+  }
+
+  const [row] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, req.user.id));
+
+  if (!row) {
+    res.json(GetCurrentAuthUserResponse.parse({ user: null }));
+    return;
+  }
+
+  res.json(GetCurrentAuthUserResponse.parse({ user: publicUser(row) }));
 });
 
 router.post("/auth/signup", async (req: Request, res: Response) => {

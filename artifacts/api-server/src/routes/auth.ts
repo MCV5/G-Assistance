@@ -186,6 +186,8 @@ function publicUser(row: typeof usersTable.$inferSelect) {
     lastName: row.lastName,
     profileImageUrl: row.profileImageUrl,
     createdAt: row.createdAt,
+    dietaryGoals: [...row.dietaryGoals],
+    householdSize: row.householdSize,
   };
 }
 

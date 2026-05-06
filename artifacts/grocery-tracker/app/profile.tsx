@@ -1,3 +1,4 @@
+import { patchMyProfile } from "@workspace/api-client-react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
@@ -76,7 +77,7 @@ function pantryToCsv(items: PantryItem[]): string {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout, requestPasswordReset } = useAuth();
+  const { user, logout, requestPasswordReset, syncAuthUser } = useAuth();
   const { pantry, scans } = usePantry();
 
   const [dietaryModal, setDietaryModal] = useState(false);
@@ -86,32 +87,34 @@ export default function ProfileScreen() {
   const [householdSize, setHouseholdSize] = useState(1);
   const [householdDraft, setHouseholdDraft] = useState(1);
   const [expiryAlerts, setExpiryAlerts] = useState(true);
+  const [savingDietary, setSavingDietary] = useState(false);
+  const [savingHousehold, setSavingHousehold] = useState(false);
   const [exporting, setExporting] = useState(false);
   const prefsLoadedRef = React.useRef(false);
 
   const loadPrefs = useCallback(async () => {
     try {
-      const [dRaw, hRaw, eRaw] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_PROFILE_DIETARY),
-        AsyncStorage.getItem(STORAGE_PROFILE_HOUSEHOLD),
-        AsyncStorage.getItem(STORAGE_PROFILE_EXPIRY_ALERTS),
-      ]);
-      if (dRaw) {
-        const parsed = JSON.parse(dRaw) as unknown;
-        if (Array.isArray(parsed)) {
-          setDietarySelected(parsed.filter((x) => typeof x === "string"));
-        }
-      }
-      if (hRaw) {
-        const n = Number.parseInt(hRaw, 10);
-        if (Number.isFinite(n) && n >= 1 && n <= 8) setHouseholdSize(n);
-      }
+      const eRaw = await AsyncStorage.getItem(STORAGE_PROFILE_EXPIRY_ALERTS);
       if (eRaw === "off") setExpiryAlerts(false);
       else setExpiryAlerts(true);
     } catch {
       /* defaults */
     }
   }, []);
+
+  const serverPrefsKey = user
+    ? `${JSON.stringify(user.dietaryGoals)}|${user.householdSize}`
+    : "";
+
+  useEffect(() => {
+    if (!user) return;
+    setDietarySelected([...user.dietaryGoals]);
+    setHouseholdSize(user.householdSize);
+    void AsyncStorage.multiSet([
+      [STORAGE_PROFILE_DIETARY, JSON.stringify(user.dietaryGoals)],
+      [STORAGE_PROFILE_HOUSEHOLD, String(user.householdSize)],
+    ]);
+  }, [serverPrefsKey, user]);
 
   useEffect(() => {
     if (prefsLoadedRef.current) return;
@@ -160,14 +163,19 @@ export default function ProfileScreen() {
   };
 
   const saveDietary = async () => {
-    setDietarySelected([...dietaryDraft]);
+    setSavingDietary(true);
     try {
-      await AsyncStorage.setItem(
-        STORAGE_PROFILE_DIETARY,
-        JSON.stringify(dietaryDraft),
+      await patchMyProfile({ dietaryGoals: dietaryDraft });
+      await syncAuthUser();
+      setDietaryModal(false);
+    } catch {
+      Alert.alert(
+        "Couldn't save",
+        "Check your connection and try again. Your changes were not saved.",
       );
-    } catch {}
-    setDietaryModal(false);
+    } finally {
+      setSavingDietary(false);
+    }
   };
 
   const openHousehold = () => {
@@ -176,14 +184,19 @@ export default function ProfileScreen() {
   };
 
   const saveHousehold = async () => {
-    setHouseholdSize(householdDraft);
+    setSavingHousehold(true);
     try {
-      await AsyncStorage.setItem(
-        STORAGE_PROFILE_HOUSEHOLD,
-        String(householdDraft),
+      await patchMyProfile({ householdSize: householdDraft });
+      await syncAuthUser();
+      setHouseholdModal(false);
+    } catch {
+      Alert.alert(
+        "Couldn't save",
+        "Check your connection and try again. Your changes were not saved.",
       );
-    } catch {}
-    setHouseholdModal(false);
+    } finally {
+      setSavingHousehold(false);
+    }
   };
 
   const toggleExpiryPref = async () => {
@@ -439,8 +452,16 @@ export default function ProfileScreen() {
               })}
             </View>
           </ScrollView>
-          <Pressable style={styles.sheetSave} onPress={() => void saveDietary()}>
-            <Text style={styles.sheetSaveTxt}>Save</Text>
+          <Pressable
+            style={[styles.sheetSave, savingDietary && { opacity: 0.7 }]}
+            disabled={savingDietary}
+            onPress={() => void saveDietary()}
+          >
+            {savingDietary ? (
+              <ActivityIndicator color={c.cream} />
+            ) : (
+              <Text style={styles.sheetSaveTxt}>Save</Text>
+            )}
           </Pressable>
           </View>
         </View>
@@ -484,8 +505,16 @@ export default function ProfileScreen() {
           <Text style={styles.hhHint}>
             {householdDraft === 1 ? "1 person" : `${householdDraft} people`}
           </Text>
-          <Pressable style={styles.sheetSave} onPress={() => void saveHousehold()}>
-            <Text style={styles.sheetSaveTxt}>Save</Text>
+          <Pressable
+            style={[styles.sheetSave, savingHousehold && { opacity: 0.7 }]}
+            disabled={savingHousehold}
+            onPress={() => void saveHousehold()}
+          >
+            {savingHousehold ? (
+              <ActivityIndicator color={c.cream} />
+            ) : (
+              <Text style={styles.sheetSaveTxt}>Save</Text>
+            )}
           </Pressable>
           </View>
         </View>

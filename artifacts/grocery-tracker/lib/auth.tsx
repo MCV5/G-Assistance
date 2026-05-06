@@ -68,6 +68,8 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   pendingRecoveryCode: string | null;
+  /** Refetch /auth/user without clearing the session on failure (e.g. after profile PATCH). */
+  syncAuthUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   signup: (
     email: string,
@@ -86,6 +88,7 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   isAuthenticated: false,
   pendingRecoveryCode: null,
+  syncAuthUser: async () => {},
   login: async () => {},
   signup: async () => {},
   logout: async () => {},
@@ -139,6 +142,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       await clearToken();
       setUser(null);
+    }
+  }, []);
+
+  const syncAuthUser = useCallback(async (): Promise<void> => {
+    try {
+      const token = await readToken();
+      if (!token) return;
+      const data = await getCurrentAuthUser();
+      if (data?.user) setUser(data.user);
+    } catch {
+      /* keep existing user; network or transient errors */
     }
   }, []);
 
@@ -228,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         pendingRecoveryCode,
+        syncAuthUser,
         login,
         signup,
         logout,

@@ -80,6 +80,33 @@ export interface AuthUser {
   lastName: string | null;
   /** @nullable */
   profileImageUrl: string | null;
+  /** Account creation time (ISO 8601). */
+  createdAt: string;
+  /** Saved dietary tags (subset of app-defined options). */
+  dietaryGoals: string[];
+  /**
+   * @minimum 1
+   * @maximum 8
+   */
+  householdSize: number;
+}
+
+export interface PatchMyProfileRequest {
+  dietaryGoals?: string[];
+  /**
+   * @minimum 1
+   * @maximum 8
+   */
+  householdSize?: number;
+}
+
+export interface ProfilePreferences {
+  dietaryGoals: string[];
+  /**
+   * @minimum 1
+   * @maximum 8
+   */
+  householdSize: number;
 }
 
 export interface AuthUserEnvelope {

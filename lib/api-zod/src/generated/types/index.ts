@@ -18,6 +18,8 @@ export * from "./loginRequest";
 export * from "./logoutSuccess";
 export * from "./passwordResetRequest";
 export * from "./passwordResetSuccess";
+export * from "./patchMyProfileRequest";
+export * from "./profilePreferences";
 export * from "./receiptInput";
 export * from "./receiptInputSourceType";
 export * from "./receiptResult";

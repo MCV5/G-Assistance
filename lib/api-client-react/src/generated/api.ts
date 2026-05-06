@@ -25,6 +25,8 @@ import type {
   LogoutSuccess,
   PasswordResetRequest,
   PasswordResetSuccess,
+  PatchMyProfileRequest,
+  ProfilePreferences,
   ReceiptInput,
   ReceiptResult,
   RecoveryCodeSuccess,
@@ -853,4 +855,90 @@ export const usePutMyStore = <
   TContext
 > => {
   return useMutation(getPutMyStoreMutationOptions(options));
+};
+
+/**
+ * @summary Update dietary goals and household size
+ */
+export const getPatchMyProfileUrl = () => {
+  return `/api/me/profile`;
+};
+
+export const patchMyProfile = async (
+  patchMyProfileRequest: PatchMyProfileRequest,
+  options?: RequestInit,
+): Promise<ProfilePreferences> => {
+  return customFetch<ProfilePreferences>(getPatchMyProfileUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(patchMyProfileRequest),
+  });
+};
+
+export const getPatchMyProfileMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchMyProfile>>,
+    TError,
+    { data: BodyType<PatchMyProfileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchMyProfile>>,
+  TError,
+  { data: BodyType<PatchMyProfileRequest> },
+  TContext
+> => {
+  const mutationKey = ["patchMyProfile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchMyProfile>>,
+    { data: BodyType<PatchMyProfileRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return patchMyProfile(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchMyProfileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchMyProfile>>
+>;
+export type PatchMyProfileMutationBody = BodyType<PatchMyProfileRequest>;
+export type PatchMyProfileMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Update dietary goals and household size
+ */
+export const usePatchMyProfile = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchMyProfile>>,
+    TError,
+    { data: BodyType<PatchMyProfileRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchMyProfile>>,
+  TError,
+  { data: BodyType<PatchMyProfileRequest> },
+  TContext
+> => {
+  return useMutation(getPatchMyProfileMutationOptions(options));
 };

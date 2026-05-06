@@ -116,7 +116,7 @@ export default function ForgotPasswordScreen() {
           <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
             {hasToken
               ? "Enter your email and choose a new password."
-              : "Enter your email and we'll send you a reset link."}
+              : "Use the same email you signed up with. If an account exists, we'll send reset instructions to that inbox."}
           </Text>
         </View>
 
@@ -148,7 +148,9 @@ export default function ForgotPasswordScreen() {
 
           {requested ? (
             <Text style={[styles.success, { color: colors.primary }]}>
-              If an account exists for this email, a reset link has been sent.
+              If an account exists for that email, we sent instructions. Check your
+              inbox and spam. If nothing arrives after a few minutes, try another
+              email or confirm you didn't typo the address.
             </Text>
           ) : null}
           {debugResetLink ? (
@@ -183,7 +185,7 @@ export default function ForgotPasswordScreen() {
                   { color: colors.primaryForeground },
                 ]}
               >
-                {hasToken ? "Reset password" : "Send reset link"}
+                {hasToken ? "Reset password" : "Request reset email"}
               </Text>
             )}
           </Pressable>
@@ -191,8 +193,8 @@ export default function ForgotPasswordScreen() {
 
         <Text style={[styles.helper, { color: colors.mutedForeground }]}>
           {hasToken
-            ? "This link expires after a short time. Request another link if needed."
-            : "Check your spam folder if you don't see the email in a minute."}
+            ? "Reset links expire after about an hour. Request a new email if this one stops working."
+            : "For your security, we use the same message whether or not that email is in our system — only a real account receives mail."}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

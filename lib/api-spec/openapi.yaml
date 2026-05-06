@@ -238,6 +238,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /me/profile:
+    patch:
+      tags: [store]
+      operationId: patchMyProfile
+      summary: Update dietary goals and household size
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchMyProfileRequest'
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfilePreferences'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 components:
   parameters:
     AuthorizationSessionHeader:
@@ -328,7 +361,8 @@ components:
       required: [error]
     AuthUser:
       type: object
-      required: [id, email, firstName, lastName, profileImageUrl]
+      required:
+        [id, email, firstName, lastName, profileImageUrl, createdAt, dietaryGoals, householdSize]
       properties:
         id:
           type: string
@@ -342,6 +376,42 @@ components:
         profileImageUrl:
           type: [string, 'null']
           format: uri
+        createdAt:
+          type: string
+          format: date-time
+          description: Account creation time (ISO 8601).
+        dietaryGoals:
+          type: array
+          items:
+            type: string
+          description: Saved dietary tags (subset of app-defined options).
+        householdSize:
+          type: integer
+          minimum: 1
+          maximum: 8
+    PatchMyProfileRequest:
+      type: object
+      properties:
+        dietaryGoals:
+          type: array
+          items:
+            type: string
+        householdSize:
+          type: integer
+          minimum: 1
+          maximum: 8
+    ProfilePreferences:
+      type: object
+      required: [dietaryGoals, householdSize]
+      properties:
+        dietaryGoals:
+          type: array
+          items:
+            type: string
+        householdSize:
+          type: integer
+          minimum: 1
+          maximum: 8
     AuthUserEnvelope:
       type: object
       required: [user]

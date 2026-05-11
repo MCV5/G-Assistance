@@ -1,6 +1,6 @@
 kind = "mobile"
 previewPath = "/"
-title = "Grocery Tracker"
+title = "Glowcery App"
 version = "1.0.0"
 id = "artifacts/grocery-tracker"
 router = "expo-domain"

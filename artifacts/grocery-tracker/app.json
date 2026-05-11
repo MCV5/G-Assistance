@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Gassistant",
-    "slug": "gassistant",
+    "name": "Glowcery App",
+    "slug": "glowcery-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "gassistant",
+    "scheme": "glowcery",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.gassistant.app"
+      "bundleIdentifier": "com.glowcery.app"
     },
     "android": {
-      "package": "com.gassistant.app",
+      "package": "com.glowcery.app",
       "usesCleartextTraffic": true
     },
     "web": {
@@ -36,7 +36,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Grocery Tracker to use the camera to scan barcodes."
+          "cameraPermission": "Allow Glowcery App to use the camera to scan barcodes."
         }
       ]
     ],

@@ -89,7 +89,25 @@ export interface AuthUser {
    * @maximum 8
    */
   householdSize: number;
+  /** False until the user confirms their email. Accounts created before verification was added are reported as true. */
+  emailVerified: boolean;
 }
+
+export interface VerifyEmailConfirmRequest {
+  email: string;
+  /** @minLength 20 */
+  token: string;
+}
+
+export const VerifyEmailSuccessValue = {
+  success: true,
+} as const;
+export type VerifyEmailSuccess = typeof VerifyEmailSuccessValue;
+
+export const VerifyEmailSendSuccessValue = {
+  success: true,
+} as const;
+export type VerifyEmailSendSuccess = typeof VerifyEmailSendSuccessValue;
 
 export interface PatchMyProfileRequest {
   dietaryGoals?: string[];

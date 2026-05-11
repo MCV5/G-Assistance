@@ -46,6 +46,7 @@ function RootLayoutNav() {
       <Stack.Screen name="onboarding" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      <Stack.Screen name="verify-email" options={{ headerShown: false }} />
       <Stack.Screen
         name="scan-review"
         options={{
@@ -91,11 +92,17 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     const onPublicRoute =
       first === "login" ||
       first === "forgot-password" ||
+      first === "onboarding" ||
+      first === "verify-email";
+
+    const onAuthBumpPublicRoute =
+      first === "login" ||
+      first === "forgot-password" ||
       first === "onboarding";
 
     if (!isAuthenticated && !onPublicRoute) {
       router.replace(onboarded ? "/login" : "/onboarding");
-    } else if (isAuthenticated && onPublicRoute) {
+    } else if (isAuthenticated && onAuthBumpPublicRoute) {
       router.replace("/");
     }
   }, [isAuthenticated, isLoading, segments, router, onboarded]);

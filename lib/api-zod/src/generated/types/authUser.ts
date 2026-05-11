@@ -24,4 +24,6 @@ export interface AuthUser {
    * @maximum 8
    */
   householdSize: number;
+  /** False until the user confirms their email. Accounts created before verification was added are reported as true. */
+  emailVerified: boolean;
 }

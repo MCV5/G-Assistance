@@ -10,6 +10,8 @@ function normalizeAuthUser(raw: AuthUser | undefined): AuthUser | undefined {
       : raw.createdAt
         ? new Date(raw.createdAt as unknown as string)
         : new Date(0);
+  const emailVerified = raw.emailVerified === false ? false : true;
+
   return {
     id: raw.id,
     email: raw.email ?? null,
@@ -24,6 +26,7 @@ function normalizeAuthUser(raw: AuthUser | undefined): AuthUser | undefined {
       raw.householdSize <= 8
         ? raw.householdSize
         : 1,
+    emailVerified,
   };
 }
 

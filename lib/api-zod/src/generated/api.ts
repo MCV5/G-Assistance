@@ -100,6 +100,11 @@ export const SignupResponse = zod.object({
       .array(zod.string())
       .describe("Saved dietary tags (subset of app-defined options)."),
     householdSize: zod.number().min(1).max(signupResponseUserHouseholdSizeMax),
+    emailVerified: zod
+      .boolean()
+      .describe(
+        "False until the user confirms their email. Accounts created before verification was added are reported as true.",
+      ),
   }),
   token: zod.string(),
   recoveryCode: zod
@@ -132,6 +137,11 @@ export const LoginResponse = zod.object({
       .array(zod.string())
       .describe("Saved dietary tags (subset of app-defined options)."),
     householdSize: zod.number().min(1).max(loginResponseUserHouseholdSizeMax),
+    emailVerified: zod
+      .boolean()
+      .describe(
+        "False until the user confirms their email. Accounts created before verification was added are reported as true.",
+      ),
   }),
   token: zod.string(),
 });
@@ -211,9 +221,42 @@ export const GetCurrentAuthUserResponse = zod.object({
         .number()
         .min(1)
         .max(getCurrentAuthUserResponseUserOneHouseholdSizeMax),
+      emailVerified: zod
+        .boolean()
+        .describe(
+          "False until the user confirms their email. Accounts created before verification was added are reported as true.",
+        ),
     }),
     zod.null(),
   ]),
+});
+
+/**
+ * @summary Confirm email address using the link token from the verification email
+ */
+export const confirmEmailVerificationBodyTokenMin = 20;
+
+export const ConfirmEmailVerificationBody = zod.object({
+  email: zod.string().email(),
+  token: zod.string().min(confirmEmailVerificationBodyTokenMin),
+});
+
+export const ConfirmEmailVerificationResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Send (or resend) the verification email for the current user
+ */
+export const SendVerificationEmailHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const SendVerificationEmailResponse = zod.object({
+  success: zod.boolean(),
 });
 
 /**

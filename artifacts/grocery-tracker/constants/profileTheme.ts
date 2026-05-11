@@ -17,6 +17,9 @@ export const STORAGE_PROFILE_DIETARY = "@profile_dietary_goals";
 export const STORAGE_PROFILE_HOUSEHOLD = "@profile_household_size";
 export const STORAGE_PROFILE_EXPIRY_ALERTS = "@profile_expiry_alerts_pref";
 
+/**
+ * Dietary pill labels. Must match `artifacts/api-server/src/lib/dietaryOptions.ts`.
+ */
 export const DIETARY_OPTIONS = [
   "High protein",
   "Low sugar",

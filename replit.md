@@ -2,7 +2,7 @@
 
 ## Overview
 
-Grocery Tracker — an Expo (React Native) mobile app that uses AI vision to extract grocery items from photos of receipts, shopping bags, and carts. The app tracks pantry inventory, learns each user's purchase cadence per item, and predicts when to restock.
+Glowcery App — an Expo (React Native) mobile app that uses AI vision to extract grocery items from photos of receipts, shopping bags, and carts. The app tracks pantry inventory, learns each user's purchase cadence per item, and predicts when to restock.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ This is a pnpm monorepo with the following workspace structure:
 
 ## Recent Changes (2026-04-25)
 
-- Initial build of Grocery Tracker mobile app with full scan → review → pantry → shopping flow.
+- Initial build of Glowcery App mobile app with full scan → review → pantry → shopping flow.
 - Added `/analyze-receipt` endpoint backed by Gemini 2.5 Flash vision.
 - Established sage/cream theme and Inter typography.
 - Added Insights tab (top items, cadence, predicted restocks, category breakdown).

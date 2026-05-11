@@ -69,7 +69,7 @@ function escapeHtml(value: string): string {
 }
 
 function getResetEmailTemplate(link: string): { text: string; html: string } {
-  const appName = process.env.APP_NAME || "Grocery Tracker";
+  const appName = process.env.APP_NAME || "Glowcery App";
   const safeAppName = escapeHtml(appName);
   const safeLink = escapeHtml(link);
 
@@ -126,7 +126,7 @@ async function sendResetEmailViaResend(
     throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
   }
 
-  const subject = `Reset your ${process.env.APP_NAME || "Grocery Tracker"} password`;
+  const subject = `Reset your ${process.env.APP_NAME || "Glowcery App"} password`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -171,7 +171,7 @@ async function sendResetEmail(email: string, link: string): Promise<boolean> {
   await transporter.sendMail({
     from: getMailFrom(),
     to: email,
-    subject: `Reset your ${process.env.APP_NAME || "Grocery Tracker"} password`,
+    subject: `Reset your ${process.env.APP_NAME || "Glowcery App"} password`,
     text: template.text,
     html: template.html,
   });
@@ -186,6 +186,8 @@ function publicUser(row: typeof usersTable.$inferSelect) {
     lastName: row.lastName,
     profileImageUrl: row.profileImageUrl,
     createdAt: row.createdAt,
+    dietaryGoals: [...row.dietaryGoals],
+    householdSize: row.householdSize,
   };
 }
 

@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
@@ -36,5 +36,13 @@ app.use(authMiddleware);
 app.use(emailVerifiedGate);
 
 app.use("/api", router);
+
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (res.headersSent) return;
+  logger.error({ err }, "Unhandled API error");
+  res.status(500).json({
+    error: "Something went wrong on the server. Please try again in a moment.",
+  });
+});
 
 export default app;

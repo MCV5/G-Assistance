@@ -18,14 +18,30 @@ function normalizeText(value: unknown): string {
 }
 
 function getErrorDetails(error: unknown): { status?: number; message: string } {
-  const err = (error ?? {}) as ApiErrorShape;
-  const status = err.response?.status ?? err.status;
+  const err = (error ?? {}) as ApiErrorShape & {
+    status?: number;
+    data?: { error?: string; message?: string } | null;
+  };
+  const status = err.status ?? err.response?.status;
+  const fromFetchBody =
+    normalizeText(err.data?.error) ||
+    normalizeText(err.data?.message);
   const rawMessage =
+    fromFetchBody ||
     normalizeText(err.response?.data?.error) ||
     normalizeText(err.response?.data?.message) ||
     normalizeText(err.message);
 
   return { status, message: rawMessage };
+}
+
+function isHtmlErrorBody(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("<!doctype") ||
+    lower.includes("<html") ||
+    lower.includes("internal server error</pre>")
+  );
 }
 
 function isNetworkMessage(message: string): boolean {
@@ -44,6 +60,13 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
     return "We couldn't reach the server. Check your connection and try again.";
   }
 
+  if (isHtmlErrorBody(message) || (status === 500 && message.includes("HTTP 500"))) {
+    if (action === "signup") {
+      return "The server had a problem creating your account. The database may need an update on Render — run the email-verification migration on Postgres, redeploy the API, then try again.";
+    }
+    return "The server had a problem. Please try again in a moment.";
+  }
+
   if (action === "login") {
     if (status === 401 || message.toLowerCase().includes("invalid email or password")) {
       return "Email or password didn't match. Please try again.";
@@ -57,6 +80,12 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
     }
     if (status === 400) {
       return "Please review your details and try again.";
+    }
+    if (status === 503 && message) {
+      return message;
+    }
+    if (status === 500 && message && message.length > 0 && message.length < 220) {
+      return message;
     }
     return "Couldn't create your account right now. Please try again.";
   }

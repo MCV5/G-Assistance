@@ -36,6 +36,7 @@ export const usersTable = pgTable("users", {
    */
   emailVerified: boolean("email_verified"),
   emailVerifyTokenHash: varchar("email_verify_token_hash"),
+  emailVerifyCodeHash: varchar("email_verify_code_hash"),
   emailVerifyTokenExpiresAt: timestamp("email_verify_token_expires_at", {
     withTimezone: true,
   }),

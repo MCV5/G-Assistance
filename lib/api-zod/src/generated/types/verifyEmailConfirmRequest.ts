@@ -7,6 +7,14 @@
 
 export interface VerifyEmailConfirmRequest {
   email: string;
-  /** @minLength 20 */
-  token: string;
+  /**
+   * Long token from the email link (web or app deep link).
+   * @minLength 20
+   */
+  token?: string;
+  /**
+   * Six-digit code from the verification email (preferred in the mobile app).
+   * @pattern ^[0-9]{6}$
+   */
+  code?: string;
 }

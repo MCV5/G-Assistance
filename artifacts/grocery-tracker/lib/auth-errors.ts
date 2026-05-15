@@ -35,6 +35,15 @@ function getErrorDetails(error: unknown): { status?: number; message: string } {
   return { status, message: rawMessage };
 }
 
+function isHtmlErrorBody(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("<!doctype") ||
+    lower.includes("<html") ||
+    lower.includes("internal server error</pre>")
+  );
+}
+
 function isNetworkMessage(message: string): boolean {
   const lower = message.toLowerCase();
   return (
@@ -49,6 +58,13 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
 
   if (isNetworkMessage(message)) {
     return "We couldn't reach the server. Check your connection and try again.";
+  }
+
+  if (isHtmlErrorBody(message) || (status === 500 && message.includes("HTTP 500"))) {
+    if (action === "signup") {
+      return "The server had a problem creating your account. The database may need an update on Render — run the email-verification migration on Postgres, redeploy the API, then try again.";
+    }
+    return "The server had a problem. Please try again in a moment.";
   }
 
   if (action === "login") {

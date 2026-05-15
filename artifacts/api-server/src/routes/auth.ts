@@ -457,10 +457,19 @@ function isLikelyMissingSchemaColumnError(err: unknown): boolean {
   if (code === "42703") return true;
   if (/column .* does not exist/i.test(msg)) return true;
   if (/relation .* does not exist/i.test(msg)) return true;
+  if (/failed query/i.test(msg) && /email_verif/i.test(msg)) return true;
   return false;
 }
 
+function respondSchemaNotReady(res: Response): void {
+  res.status(503).json({
+    error:
+      "Sign-up is temporarily unavailable. The server database needs the latest update (email verification columns). Ask the app owner to run the migration on production Postgres, then redeploy.",
+  });
+}
+
 router.post("/auth/signup", async (req: Request, res: Response) => {
+  try {
   const parsed = SignupBody.safeParse(req.body);
   if (!parsed.success) {
     res
@@ -473,10 +482,19 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   const firstName = parsed.data.firstName?.trim() || null;
   const lastName = parsed.data.lastName?.trim() || null;
 
-  const [existing] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email));
+  let existing: typeof usersTable.$inferSelect | undefined;
+  try {
+    const rows = await db.select().from(usersTable).where(eq(usersTable.email, email));
+    existing = rows[0];
+  } catch (err) {
+    console.error("[auth] signup lookup failed:", err);
+    if (isLikelyMissingSchemaColumnError(err)) {
+      respondSchemaNotReady(res);
+      return;
+    }
+    res.status(500).json({ error: "Could not create your account. Please try again." });
+    return;
+  }
   if (existing) {
     res.status(409).json({ error: "An account with that email already exists." });
     return;
@@ -512,10 +530,7 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("[auth] signup insert failed:", err);
     if (isLikelyMissingSchemaColumnError(err)) {
-      res.status(503).json({
-        error:
-          "Sign-up is unavailable until the database is updated. If you run the app, ask the owner to apply the latest schema (email verification columns) to production Postgres, then redeploy.",
-      });
+      respondSchemaNotReady(res);
       return;
     }
     res.status(500).json({ error: "Could not create your account. Please try again." });
@@ -545,6 +560,18 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     res.json(SignupResponse.parse({ user, token: sid, recoveryCode }));
   } catch (err) {
     console.error("[auth] signup session or response failed:", err);
+    if (isLikelyMissingSchemaColumnError(err)) {
+      respondSchemaNotReady(res);
+      return;
+    }
+    res.status(500).json({ error: "Could not create your account. Please try again." });
+  }
+  } catch (err) {
+    console.error("[auth] signup unhandled:", err);
+    if (isLikelyMissingSchemaColumnError(err)) {
+      respondSchemaNotReady(res);
+      return;
+    }
     res.status(500).json({ error: "Could not create your account. Please try again." });
   }
 });

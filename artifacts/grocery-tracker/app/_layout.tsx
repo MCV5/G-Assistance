@@ -46,6 +46,7 @@ function RootLayoutNav() {
       <Stack.Screen name="onboarding" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen name="login" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      <Stack.Screen name="verify-email" options={{ headerShown: false }} />
       <Stack.Screen
         name="scan-review"
         options={{
@@ -74,7 +75,7 @@ function RootLayoutNav() {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
@@ -88,17 +89,31 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading || onboarded === null) return;
     const first = segments[0];
+
+    if (isAuthenticated && user?.emailVerified === false) {
+      if (first !== "verify-email") {
+        router.replace("/verify-email");
+      }
+      return;
+    }
+
     const onPublicRoute =
+      first === "login" ||
+      first === "forgot-password" ||
+      first === "onboarding" ||
+      first === "verify-email";
+
+    const onAuthBumpPublicRoute =
       first === "login" ||
       first === "forgot-password" ||
       first === "onboarding";
 
     if (!isAuthenticated && !onPublicRoute) {
       router.replace(onboarded ? "/login" : "/onboarding");
-    } else if (isAuthenticated && onPublicRoute) {
+    } else if (isAuthenticated && onAuthBumpPublicRoute) {
       router.replace("/");
     }
-  }, [isAuthenticated, isLoading, segments, router, onboarded]);
+  }, [isAuthenticated, isLoading, segments, router, onboarded, user?.emailVerified]);
 
   if (isLoading || onboarded === null) {
     return (

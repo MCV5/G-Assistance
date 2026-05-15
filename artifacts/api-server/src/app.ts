@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { authMiddleware } from "./middlewares/authMiddleware";
+import { emailVerifiedGate } from "./middlewares/emailVerifiedGate";
 
 const app: Express = express();
 
@@ -32,6 +33,7 @@ app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 app.use(authMiddleware);
+app.use(emailVerifiedGate);
 
 app.use("/api", router);
 

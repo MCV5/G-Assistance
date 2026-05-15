@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -27,6 +28,15 @@ export const usersTable = pgTable("users", {
   recoveryCodeHash: varchar("recovery_code_hash"),
   passwordResetTokenHash: varchar("password_reset_token_hash"),
   passwordResetTokenExpiresAt: timestamp("password_reset_token_expires_at", {
+    withTimezone: true,
+  }),
+  /**
+   * Email confirmation: `null` = account created before verification existed (treated as verified).
+   * `false` = pending; `true` = confirmed.
+   */
+  emailVerified: boolean("email_verified"),
+  emailVerifyTokenHash: varchar("email_verify_token_hash"),
+  emailVerifyTokenExpiresAt: timestamp("email_verify_token_expires_at", {
     withTimezone: true,
   }),
   firstName: varchar("first_name"),

@@ -9,10 +9,12 @@ import React, {
 import * as SecureStore from "expo-secure-store";
 
 import {
+  confirmEmailVerification as apiConfirmEmailVerification,
   getCurrentAuthUser,
   login as apiLogin,
   logout as apiLogout,
   regenerateRecoveryCode as apiRegenerateRecoveryCode,
+  sendVerificationEmail as apiSendVerificationEmail,
   signup as apiSignup,
   type AuthUser,
 } from "@workspace/api-client-react";
@@ -81,6 +83,10 @@ interface AuthContextValue {
   requestPasswordReset: (email: string) => Promise<{ resetLink?: string }>;
   resetPassword: (email: string, token: string, newPassword: string) => Promise<void>;
   regenerateRecoveryCode: () => Promise<string>;
+  /** Public: confirm magic-link token sent to inbox. */
+  confirmEmailAddress: (email: string, token: string) => Promise<void>;
+  /** Authenticated resend for pending verification (no-op if already verified). */
+  resendVerificationEmail: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -96,6 +102,8 @@ const AuthContext = createContext<AuthContextValue>({
   requestPasswordReset: async () => ({}),
   resetPassword: async () => {},
   regenerateRecoveryCode: async () => "",
+  confirmEmailAddress: async () => {},
+  resendVerificationEmail: async () => {},
 });
 
 async function readToken(): Promise<string | null> {
@@ -235,6 +243,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return result.recoveryCode;
   }, []);
 
+  const confirmEmailAddress = useCallback<
+    AuthContextValue["confirmEmailAddress"]
+  >(async (email, token) => {
+    await apiConfirmEmailVerification({
+      email: email.trim().toLowerCase(),
+      token,
+    });
+  }, []);
+
+  const resendVerificationEmail = useCallback<
+    AuthContextValue["resendVerificationEmail"]
+  >(async () => {
+    await apiSendVerificationEmail();
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -250,6 +273,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         requestPasswordReset,
         resetPassword,
         regenerateRecoveryCode,
+        confirmEmailAddress,
+        resendVerificationEmail,
       }}
     >
       {children}

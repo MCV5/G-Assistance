@@ -33,6 +33,9 @@ import type {
   SignupRequest,
   SignupSuccess,
   UserStore,
+  VerifyEmailConfirmRequest,
+  VerifyEmailSendSuccess,
+  VerifyEmailSuccess,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -697,6 +700,174 @@ export function useGetCurrentAuthUser<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Confirm email address using the link token from the verification email
+ */
+export const getConfirmEmailVerificationUrl = () => {
+  return `/api/auth/verify-email/confirm`;
+};
+
+export const confirmEmailVerification = async (
+  verifyEmailConfirmRequest: VerifyEmailConfirmRequest,
+  options?: RequestInit,
+): Promise<VerifyEmailSuccess> => {
+  return customFetch<VerifyEmailSuccess>(getConfirmEmailVerificationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(verifyEmailConfirmRequest),
+  });
+};
+
+export const getConfirmEmailVerificationMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmEmailVerification>>,
+    TError,
+    { data: BodyType<VerifyEmailConfirmRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof confirmEmailVerification>>,
+  TError,
+  { data: BodyType<VerifyEmailConfirmRequest> },
+  TContext
+> => {
+  const mutationKey = ["confirmEmailVerification"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof confirmEmailVerification>>,
+    { data: BodyType<VerifyEmailConfirmRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return confirmEmailVerification(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ConfirmEmailVerificationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof confirmEmailVerification>>
+>;
+export type ConfirmEmailVerificationMutationBody =
+  BodyType<VerifyEmailConfirmRequest>;
+export type ConfirmEmailVerificationMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Confirm email address using the link token from the verification email
+ */
+export const useConfirmEmailVerification = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof confirmEmailVerification>>,
+    TError,
+    { data: BodyType<VerifyEmailConfirmRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof confirmEmailVerification>>,
+  TError,
+  { data: BodyType<VerifyEmailConfirmRequest> },
+  TContext
+> => {
+  return useMutation(getConfirmEmailVerificationMutationOptions(options));
+};
+
+/**
+ * @summary Send (or resend) the verification email for the current user
+ */
+export const getSendVerificationEmailUrl = () => {
+  return `/api/auth/verify-email/send`;
+};
+
+export const sendVerificationEmail = async (
+  options?: RequestInit,
+): Promise<VerifyEmailSendSuccess> => {
+  return customFetch<VerifyEmailSendSuccess>(getSendVerificationEmailUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSendVerificationEmailMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendVerificationEmail>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof sendVerificationEmail>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["sendVerificationEmail"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof sendVerificationEmail>>,
+    void
+  > = () => {
+    return sendVerificationEmail(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SendVerificationEmailMutationResult = NonNullable<
+  Awaited<ReturnType<typeof sendVerificationEmail>>
+>;
+
+export type SendVerificationEmailMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Send (or resend) the verification email for the current user
+ */
+export const useSendVerificationEmail = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof sendVerificationEmail>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof sendVerificationEmail>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSendVerificationEmailMutationOptions(options));
+};
 
 /**
  * @summary Get the current user's grocery store

@@ -191,6 +191,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthUserEnvelope'
+  /auth/verify-email/confirm:
+    post:
+      tags: [Auth]
+      operationId: confirmEmailVerification
+      summary: Confirm email address using the link token from the verification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailConfirmRequest'
+      responses:
+        '200':
+          description: Email marked verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailSuccess'
+        '400':
+          description: Invalid input.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Token invalid or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /auth/verify-email/send:
+    post:
+      tags: [Auth]
+      operationId: sendVerificationEmail
+      summary: Send (or resend) the verification email for the current user
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      responses:
+        '200':
+          description: Verification email queued or skipped if already verified.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmailSendSuccess'
+        '401':
+          description: Not authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          description: Too many resend attempts (optional; server-dependent).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /me/store:
     get:
       tags: [store]
@@ -362,7 +419,7 @@ components:
     AuthUser:
       type: object
       required:
-        [id, email, firstName, lastName, profileImageUrl, createdAt, dietaryGoals, householdSize]
+        [id, email, firstName, lastName, profileImageUrl, createdAt, dietaryGoals, householdSize, emailVerified]
       properties:
         id:
           type: string
@@ -389,6 +446,35 @@ components:
           type: integer
           minimum: 1
           maximum: 8
+        emailVerified:
+          type: boolean
+          description: >-
+            False until the user confirms their email. Accounts created before verification
+            was added are reported as true.
+    VerifyEmailConfirmRequest:
+      type: object
+      required: [email, token]
+      properties:
+        email:
+          type: string
+          format: email
+        token:
+          type: string
+          minLength: 20
+    VerifyEmailSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
+    VerifyEmailSendSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+          const: true
     PatchMyProfileRequest:
       type: object
       properties:

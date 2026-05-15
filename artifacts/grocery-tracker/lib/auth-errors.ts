@@ -62,11 +62,13 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
   }
 
   if (action === "resetPassword") {
+    const lower = message.toLowerCase();
     if (
       status === 401 ||
-      message.toLowerCase().includes("reset link is invalid or expired")
+      lower.includes("reset link is invalid or expired") ||
+      lower.includes("verification link is invalid or expired")
     ) {
-      return "This reset link is invalid or expired. Request a new one and try again.";
+      return "This link is invalid or expired. Request a new one and try again.";
     }
     if (status === 400) {
       return "Please check each field and try again.";

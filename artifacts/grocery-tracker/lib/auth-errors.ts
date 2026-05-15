@@ -1,3 +1,7 @@
+import { HttpApiError } from "@workspace/api-client-react";
+
+import { getApiBaseUrl } from "@/lib/apiBase";
+
 type AuthAction = "login" | "signup" | "resetPassword";
 
 interface ApiErrorShape {
@@ -18,6 +22,17 @@ function normalizeText(value: unknown): string {
 }
 
 function getErrorDetails(error: unknown): { status?: number; message: string } {
+  if (error instanceof HttpApiError) {
+    const data = error.data as { error?: string; message?: string } | null;
+    return {
+      status: error.status,
+      message:
+        normalizeText(data?.error) ||
+        normalizeText(data?.message) ||
+        normalizeText(error.message),
+    };
+  }
+
   const err = (error ?? {}) as ApiErrorShape & {
     status?: number;
     data?: { error?: string; message?: string } | null;
@@ -53,11 +68,26 @@ function isNetworkMessage(message: string): boolean {
   );
 }
 
+export function getAuthErrorStatus(error: unknown): number | undefined {
+  return getErrorDetails(error).status;
+}
+
 export function getAuthErrorMessage(error: unknown, action: AuthAction): string {
   const { status, message } = getErrorDetails(error);
 
+  if (
+    message.toLowerCase().includes("api is not configured") ||
+    message.toLowerCase().includes("expo_public_api_url")
+  ) {
+    return "This build is not connected to the server. Fully quit Expo Go, run the app again from the project that includes the API URL, then try sign-up.";
+  }
+
   if (isNetworkMessage(message)) {
-    return "We couldn't reach the server. Check your connection and try again.";
+    const api = getApiBaseUrl();
+    if (api) {
+      return `We couldn't reach the server (${api}). Check Wi‑Fi and that the API is running, then reload the app.`;
+    }
+    return "We couldn't reach the server. Set EXPO_PUBLIC_API_URL in .env to your API (e.g. https://g-assistance.onrender.com), restart Expo, and try again.";
   }
 
   if (isHtmlErrorBody(message) || (status === 500 && message.includes("HTTP 500"))) {

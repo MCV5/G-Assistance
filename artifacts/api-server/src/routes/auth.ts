@@ -460,13 +460,23 @@ function isEmailVerifiedRow(row: typeof usersTable.$inferSelect): boolean {
   return row.emailVerified;
 }
 
+function normalizeProfileImageUrl(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  try {
+    new URL(value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 function publicUser(row: typeof usersTable.$inferSelect) {
   return {
     id: row.id,
     email: row.email,
     firstName: row.firstName,
     lastName: row.lastName,
-    profileImageUrl: row.profileImageUrl,
+    profileImageUrl: normalizeProfileImageUrl(row.profileImageUrl),
     createdAt: row.createdAt,
     dietaryGoals: [...row.dietaryGoals],
     householdSize: row.householdSize,
@@ -558,30 +568,63 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   const verification = generateEmailVerificationCredentials();
 
   let created: typeof usersTable.$inferSelect | undefined;
+  const fullInsertValues = {
+    email,
+    passwordHash,
+    recoveryCodeHash,
+    firstName,
+    lastName,
+    emailVerified: false as const,
+    emailVerifyTokenHash: verification.tokenHash,
+    emailVerifyCodeHash: verification.codeHash,
+    emailVerifyTokenExpiresAt: verification.expiresAt,
+  };
   try {
-    const inserted = await db
-      .insert(usersTable)
-      .values({
-        email,
-        passwordHash,
-        recoveryCodeHash,
-        firstName,
-        lastName,
-        emailVerified: false,
-        emailVerifyTokenHash: verification.tokenHash,
-        emailVerifyCodeHash: verification.codeHash,
-        emailVerifyTokenExpiresAt: verification.expiresAt,
-      })
-      .returning();
+    const inserted = await db.insert(usersTable).values(fullInsertValues).returning();
     created = inserted[0];
   } catch (err) {
     console.error("[auth] signup insert failed:", err);
     if (isLikelyMissingSchemaColumnError(err)) {
-      respondSchemaNotReady(res);
+      const msg = String(
+        (err as { message?: string; cause?: { message?: string } }).message ??
+          (err as { cause?: { message?: string } }).cause?.message ??
+          err,
+      );
+      const codeHashMissing =
+        /email_verify_code_hash/i.test(msg) || /email_verify_code/i.test(msg);
+      if (codeHashMissing) {
+        try {
+          const inserted = await db
+            .insert(usersTable)
+            .values({
+              email,
+              passwordHash,
+              recoveryCodeHash,
+              firstName,
+              lastName,
+              emailVerified: false,
+              emailVerifyTokenHash: verification.tokenHash,
+              emailVerifyTokenExpiresAt: verification.expiresAt,
+            })
+            .returning();
+          created = inserted[0];
+        } catch (retryErr) {
+          console.error("[auth] signup insert retry (no code hash) failed:", retryErr);
+          if (isLikelyMissingSchemaColumnError(retryErr)) {
+            respondSchemaNotReady(res);
+            return;
+          }
+          res.status(500).json({ error: "Could not create your account. Please try again." });
+          return;
+        }
+      } else {
+        respondSchemaNotReady(res);
+        return;
+      }
+    } else {
+      res.status(500).json({ error: "Could not create your account. Please try again." });
       return;
     }
-    res.status(500).json({ error: "Could not create your account. Please try again." });
-    return;
   }
 
   if (!created) {
@@ -608,7 +651,14 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     const sessionData: SessionData = { user };
     const sid = await createSession(sessionData);
     setSessionCookie(res, sid);
-    res.json(SignupResponse.parse({ user, token: sid, recoveryCode }));
+    const payload = { user, token: sid, recoveryCode };
+    const parsedResponse = SignupResponse.safeParse(payload);
+    if (!parsedResponse.success) {
+      console.error("[auth] signup response validation:", parsedResponse.error.flatten());
+      res.json(payload);
+      return;
+    }
+    res.json(parsedResponse.data);
   } catch (err) {
     console.error("[auth] signup session or response failed:", err);
     if (isLikelyMissingSchemaColumnError(err)) {

@@ -40,6 +40,12 @@ function expoDevHost(): string | null {
  * and port `EXPO_PUBLIC_API_PORT` (default 3001) so a physical device can reach
  * `pnpm dev:api` on your machine.
  */
+function apiUrlFromExpoConfig(): string | null {
+  const extra = Constants.expoConfig?.extra as { apiUrl?: string } | undefined;
+  const url = extra?.apiUrl?.trim();
+  return url ? stripTrailingSlashes(url) : null;
+}
+
 export function getApiBaseUrl(): string | null {
   const fromEnv =
     process.env.EXPO_PUBLIC_API_URL ||
@@ -48,6 +54,11 @@ export function getApiBaseUrl(): string | null {
       : null);
   if (fromEnv) {
     return stripTrailingSlashes(fromEnv);
+  }
+
+  const fromConfig = apiUrlFromExpoConfig();
+  if (fromConfig) {
+    return fromConfig;
   }
 
   if (typeof __DEV__ !== "undefined" && __DEV__) {

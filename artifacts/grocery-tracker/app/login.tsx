@@ -17,7 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { boldTheme as D } from "@/constants/colors";
-import { getAuthErrorMessage } from "@/lib/auth-errors";
+import { getAuthErrorMessage, getAuthErrorStatus } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
 
 type Mode = "login" | "signup";
@@ -72,7 +72,14 @@ export default function LoginScreen() {
         await login(email.trim().toLowerCase(), password);
       }
     } catch (err: unknown) {
-      setError(getAuthErrorMessage(err, mode === "signup" ? "signup" : "login"));
+      const authAction = mode === "signup" ? "signup" : "login";
+      const message = getAuthErrorMessage(err, authAction);
+      if (mode === "signup" && getAuthErrorStatus(err) === 409) {
+        switchMode("login");
+        setError(message);
+      } else {
+        setError(message);
+      }
     } finally {
       setSubmitting(false);
     }

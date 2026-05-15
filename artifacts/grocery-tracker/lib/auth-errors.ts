@@ -18,9 +18,16 @@ function normalizeText(value: unknown): string {
 }
 
 function getErrorDetails(error: unknown): { status?: number; message: string } {
-  const err = (error ?? {}) as ApiErrorShape;
-  const status = err.response?.status ?? err.status;
+  const err = (error ?? {}) as ApiErrorShape & {
+    status?: number;
+    data?: { error?: string; message?: string } | null;
+  };
+  const status = err.status ?? err.response?.status;
+  const fromFetchBody =
+    normalizeText(err.data?.error) ||
+    normalizeText(err.data?.message);
   const rawMessage =
+    fromFetchBody ||
     normalizeText(err.response?.data?.error) ||
     normalizeText(err.response?.data?.message) ||
     normalizeText(err.message);
@@ -57,6 +64,12 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
     }
     if (status === 400) {
       return "Please review your details and try again.";
+    }
+    if (status === 503 && message) {
+      return message;
+    }
+    if (status === 500 && message && message.length > 0 && message.length < 220) {
+      return message;
     }
     return "Couldn't create your account right now. Please try again.";
   }

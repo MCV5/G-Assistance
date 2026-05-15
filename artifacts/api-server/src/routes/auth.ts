@@ -445,6 +445,21 @@ router.get("/auth/user", async (req: Request, res: Response) => {
   res.json(GetCurrentAuthUserResponse.parse({ user: publicUser(row) }));
 });
 
+function isLikelyMissingSchemaColumnError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const o = err as {
+    code?: string;
+    message?: string;
+    cause?: { code?: string; message?: string };
+  };
+  const code = o.code ?? o.cause?.code;
+  const msg = String(o.message ?? o.cause?.message ?? err);
+  if (code === "42703") return true;
+  if (/column .* does not exist/i.test(msg)) return true;
+  if (/relation .* does not exist/i.test(msg)) return true;
+  return false;
+}
+
 router.post("/auth/signup", async (req: Request, res: Response) => {
   const parsed = SignupBody.safeParse(req.body);
   if (!parsed.success) {
@@ -478,19 +493,39 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   const verifyTokenHash = hashResetToken(verifyToken);
   const verifyExpiresAt = new Date(Date.now() + EMAIL_VERIFY_TTL_MS);
 
-  const [created] = await db
-    .insert(usersTable)
-    .values({
-      email,
-      passwordHash,
-      recoveryCodeHash,
-      firstName,
-      lastName,
-      emailVerified: false,
-      emailVerifyTokenHash: verifyTokenHash,
-      emailVerifyTokenExpiresAt: verifyExpiresAt,
-    })
-    .returning();
+  let created: typeof usersTable.$inferSelect | undefined;
+  try {
+    const inserted = await db
+      .insert(usersTable)
+      .values({
+        email,
+        passwordHash,
+        recoveryCodeHash,
+        firstName,
+        lastName,
+        emailVerified: false,
+        emailVerifyTokenHash: verifyTokenHash,
+        emailVerifyTokenExpiresAt: verifyExpiresAt,
+      })
+      .returning();
+    created = inserted[0];
+  } catch (err) {
+    console.error("[auth] signup insert failed:", err);
+    if (isLikelyMissingSchemaColumnError(err)) {
+      res.status(503).json({
+        error:
+          "Sign-up is unavailable until the database is updated. If you run the app, ask the owner to apply the latest schema (email verification columns) to production Postgres, then redeploy.",
+      });
+      return;
+    }
+    res.status(500).json({ error: "Could not create your account. Please try again." });
+    return;
+  }
+
+  if (!created) {
+    res.status(500).json({ error: "Could not create your account. Please try again." });
+    return;
+  }
 
   const verifyLink = buildVerifyEmailLink(email, verifyToken);
   void sendWelcomeEmail(email, firstName).catch((err) => {
@@ -502,12 +537,16 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     }
   });
 
-  const user = publicUser(created);
-  const sessionData: SessionData = { user };
-  const sid = await createSession(sessionData);
-  setSessionCookie(res, sid);
-
-  res.json(SignupResponse.parse({ user, token: sid, recoveryCode }));
+  try {
+    const user = publicUser(created);
+    const sessionData: SessionData = { user };
+    const sid = await createSession(sessionData);
+    setSessionCookie(res, sid);
+    res.json(SignupResponse.parse({ user, token: sid, recoveryCode }));
+  } catch (err) {
+    console.error("[auth] signup session or response failed:", err);
+    res.status(500).json({ error: "Could not create your account. Please try again." });
+  }
 });
 
 router.post("/auth/login", async (req: Request, res: Response) => {

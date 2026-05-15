@@ -236,9 +236,22 @@ export const GetCurrentAuthUserResponse = zod.object({
  */
 export const confirmEmailVerificationBodyTokenMin = 20;
 
+export const confirmEmailVerificationBodyCodeRegExp = new RegExp("^[0-9]{6}$");
+
 export const ConfirmEmailVerificationBody = zod.object({
   email: zod.string().email(),
-  token: zod.string().min(confirmEmailVerificationBodyTokenMin),
+  token: zod
+    .string()
+    .min(confirmEmailVerificationBodyTokenMin)
+    .optional()
+    .describe("Long token from the email link (web or app deep link)."),
+  code: zod
+    .string()
+    .regex(confirmEmailVerificationBodyCodeRegExp)
+    .optional()
+    .describe(
+      "Six-digit code from the verification email (preferred in the mobile app).",
+    ),
 });
 
 export const ConfirmEmailVerificationResponse = zod.object({

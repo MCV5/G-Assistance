@@ -453,7 +453,7 @@ components:
             was added are reported as true.
     VerifyEmailConfirmRequest:
       type: object
-      required: [email, token]
+      required: [email]
       properties:
         email:
           type: string
@@ -461,6 +461,11 @@ components:
         token:
           type: string
           minLength: 20
+          description: Long token from the email link (web or app deep link).
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+          description: Six-digit code from the verification email (preferred in the mobile app).
     VerifyEmailSuccess:
       type: object
       required: [success]

@@ -83,8 +83,11 @@ interface AuthContextValue {
   requestPasswordReset: (email: string) => Promise<{ resetLink?: string }>;
   resetPassword: (email: string, token: string, newPassword: string) => Promise<void>;
   regenerateRecoveryCode: () => Promise<string>;
-  /** Public: confirm magic-link token sent to inbox. */
-  confirmEmailAddress: (email: string, token: string) => Promise<void>;
+  /** Public: confirm with 6-digit code (preferred) or link token. */
+  confirmEmailAddress: (
+    email: string,
+    options: { token?: string; code?: string },
+  ) => Promise<void>;
   /** Authenticated resend for pending verification (no-op if already verified). */
   resendVerificationEmail: () => Promise<void>;
 }
@@ -245,11 +248,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const confirmEmailAddress = useCallback<
     AuthContextValue["confirmEmailAddress"]
-  >(async (email, token) => {
-    await apiConfirmEmailVerification({
-      email: email.trim().toLowerCase(),
-      token,
-    });
+  >(async (email, options) => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (options.code) {
+      await apiConfirmEmailVerification({
+        email: normalizedEmail,
+        code: options.code.replace(/\D/g, "").slice(0, 6),
+      });
+      return;
+    }
+    if (options.token) {
+      await apiConfirmEmailVerification({
+        email: normalizedEmail,
+        token: options.token,
+      });
+      return;
+    }
+    throw new Error("Enter the 6-digit code from your email.");
   }, []);
 
   const resendVerificationEmail = useCallback<

@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,7 +20,7 @@ export default function VerifyEmailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string; token?: string }>();
+  const params = useLocalSearchParams<{ email?: string; token?: string; code?: string }>();
   const {
     confirmEmailAddress,
     isAuthenticated,
@@ -29,43 +30,58 @@ export default function VerifyEmailScreen() {
     user,
   } = useAuth();
 
-  const prefilledEmail = typeof params.email === "string" ? params.email : "";
-  const token = typeof params.token === "string" ? params.token : "";
+  const paramEmail = typeof params.email === "string" ? params.email : "";
+  const paramToken = typeof params.token === "string" ? params.token : "";
+  const paramCode = typeof params.code === "string" ? params.code.replace(/\D/g, "") : "";
+
+  const [codeInput, setCodeInput] = useState(paramCode.length === 6 ? paramCode : "");
+  const emailForConfirm = (user?.email ?? paramEmail).trim().toLowerCase();
 
   const attemptedRef = useRef(false);
-  const hasLink = token.length >= 20 && Boolean(prefilledEmail.trim());
+  const hasAutoConfirm =
+    Boolean(emailForConfirm) &&
+    (paramToken.length >= 20 || paramCode.length === 6);
   const [status, setStatus] = useState<"idle" | "working" | "done" | "error">(
-    hasLink ? "working" : "idle",
+    hasAutoConfirm ? "working" : "idle",
   );
   const [error, setError] = useState<string | null>(null);
   const [resendBusy, setResendBusy] = useState(false);
   const [resendHint, setResendHint] = useState<string | null>(null);
+  const [submitBusy, setSubmitBusy] = useState(false);
 
   const needsEmailConfirmation =
-    isAuthenticated && user?.emailVerified === false && !hasLink;
+    isAuthenticated && user?.emailVerified === false && !hasAutoConfirm;
+
+  const runConfirm = useCallback(
+    async (opts: { token?: string; code?: string }) => {
+      if (!emailForConfirm) {
+        setError("Sign in first, then enter the code from your email.");
+        setStatus("error");
+        return;
+      }
+      setStatus("working");
+      setError(null);
+      try {
+        await confirmEmailAddress(emailForConfirm, opts);
+        await syncAuthUser();
+        setStatus("done");
+      } catch (err: unknown) {
+        setStatus("error");
+        setError(getAuthErrorMessage(err, "resetPassword"));
+      }
+    },
+    [confirmEmailAddress, emailForConfirm, syncAuthUser],
+  );
 
   useEffect(() => {
-    if (!hasLink || attemptedRef.current) return;
+    if (!hasAutoConfirm || attemptedRef.current) return;
     attemptedRef.current = true;
-    let cancelled = false;
-    (async () => {
-      try {
-        setStatus("working");
-        setError(null);
-        await confirmEmailAddress(prefilledEmail.trim().toLowerCase(), token);
-        await syncAuthUser();
-        if (!cancelled) setStatus("done");
-      } catch (err: unknown) {
-        if (!cancelled) {
-          setStatus("error");
-          setError(getAuthErrorMessage(err, "resetPassword"));
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasLink, confirmEmailAddress, prefilledEmail, token, syncAuthUser]);
+    void runConfirm(
+      paramCode.length === 6
+        ? { code: paramCode }
+        : { token: paramToken },
+    );
+  }, [hasAutoConfirm, paramCode, paramToken, runConfirm]);
 
   const goNext = () => {
     router.replace(isAuthenticated ? "/" : "/login");
@@ -76,13 +92,24 @@ export default function VerifyEmailScreen() {
     setResendBusy(true);
     try {
       await resendVerificationEmail();
-      setResendHint("Sent — check your inbox and spam folder.");
+      setResendHint("Sent — check your inbox for a new 6-digit code.");
     } catch {
       setResendHint("Could not send right now. Try again in a minute.");
     } finally {
       setResendBusy(false);
     }
   }, [resendVerificationEmail]);
+
+  const onSubmitCode = useCallback(async () => {
+    const digits = codeInput.replace(/\D/g, "");
+    if (digits.length !== 6) {
+      setError("Enter the 6-digit code from your email.");
+      return;
+    }
+    setSubmitBusy(true);
+    await runConfirm({ code: digits });
+    setSubmitBusy(false);
+  }, [codeInput, runConfirm]);
 
   const onSignOut = useCallback(async () => {
     await logout();
@@ -121,56 +148,78 @@ export default function VerifyEmailScreen() {
               <Text style={styles.buttonText}>Continue</Text>
             </Pressable>
           </>
-        ) : status === "error" ? (
+        ) : status === "error" && !needsEmailConfirmation ? (
           <>
-            <Text style={[styles.title, { color: colors.foreground }]}>{"Link didn't work"}</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>{"Couldn't verify"}</Text>
             <Text style={[styles.body, { color: colors.mutedForeground }]}>{error}</Text>
-            {needsEmailConfirmation ? (
-              <>
-                <Pressable
-                  onPress={onResend}
-                  disabled={resendBusy}
-                  style={[styles.button, { backgroundColor: colors.primary }]}
-                >
-                  {resendBusy ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Resend verification email</Text>
-                  )}
-                </Pressable>
-                {resendHint ? (
-                  <Text style={[styles.hint, { color: colors.mutedForeground }]}>{resendHint}</Text>
-                ) : null}
-              </>
-            ) : null}
             <Pressable
-              onPress={() => router.back()}
-              style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 12 }]}
+              onPress={() => setStatus("idle")}
+              style={[styles.button, { backgroundColor: colors.primary }]}
             >
-              <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Back</Text>
+              <Text style={styles.buttonText}>Try again</Text>
             </Pressable>
           </>
-        ) : needsEmailConfirmation ? (
+        ) : needsEmailConfirmation || status === "idle" || status === "error" ? (
           <>
             <Text style={[styles.title, { color: colors.foreground }]}>Confirm your email</Text>
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              We sent a welcome message and a separate email with a verification link to{" "}
+              We emailed a <Text style={{ fontFamily: "Inter_600SemiBold" }}>6-digit code</Text> to{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
-                {user?.email ?? "your inbox"}
+                {(user?.email ?? emailForConfirm) || "your inbox"}
               </Text>
-              . Open that email and tap the button before using the app.
+              . Enter it below. Links from email often do not open Expo Go — the code always works.
             </Text>
+            <TextInput
+              value={codeInput}
+              onChangeText={(t) => {
+                setCodeInput(t.replace(/\D/g, "").slice(0, 6));
+                setError(null);
+              }}
+              placeholder="000000"
+              placeholderTextColor={colors.mutedForeground}
+              keyboardType="number-pad"
+              maxLength={6}
+              style={[
+                styles.codeInput,
+                {
+                  borderColor: colors.border,
+                  color: colors.foreground,
+                  backgroundColor: colors.background,
+                },
+              ]}
+              accessibilityLabel="Verification code"
+            />
+            {error ? (
+              <Text style={[styles.hint, { color: colors.destructive }]}>{error}</Text>
+            ) : null}
+            <Pressable
+              onPress={onSubmitCode}
+              disabled={submitBusy || codeInput.length !== 6}
+              style={[
+                styles.button,
+                {
+                  backgroundColor: colors.primary,
+                  opacity: codeInput.length === 6 ? 1 : 0.5,
+                },
+              ]}
+            >
+              {submitBusy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Verify</Text>
+              )}
+            </Pressable>
             <Pressable
               onPress={onResend}
               disabled={resendBusy}
-              style={[styles.button, { backgroundColor: colors.primary }]}
-              accessibilityRole="button"
-              accessibilityLabel="Resend verification email"
+              style={[styles.buttonGhost, { borderColor: colors.border }]}
             >
               {resendBusy ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.primary} />
               ) : (
-                <Text style={styles.buttonText}>Resend verification email</Text>
+                <Text style={[styles.buttonGhostText, { color: colors.primary }]}>
+                  Resend code
+                </Text>
               )}
             </Pressable>
             {resendHint ? (
@@ -178,28 +227,12 @@ export default function VerifyEmailScreen() {
             ) : null}
             <Pressable
               onPress={onSignOut}
-              style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 16 }]}
+              style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 8 }]}
             >
               <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Sign out</Text>
             </Pressable>
           </>
-        ) : (
-          <>
-            <Text style={[styles.title, { color: colors.foreground }]}>
-              Open your verification link
-            </Text>
-            <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              Sign in on this device, then use the link in the email we sent. You can resend the
-              email from the verification screen after logging in.
-            </Text>
-            <Pressable
-              onPress={() => router.replace("/login")}
-              style={[styles.button, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.buttonText}>Go to sign in</Text>
-            </Pressable>
-          </>
-        )}
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -211,7 +244,10 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     padding: 24,
-    alignItems: "center",
+    alignItems: "stretch",
+    width: "100%",
+    maxWidth: 400,
+    alignSelf: "center",
   },
   title: { fontFamily: "Inter_600SemiBold", fontSize: 20, textAlign: "center", marginBottom: 10 },
   body: {
@@ -221,13 +257,29 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
+  codeInput: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 28,
+    letterSpacing: 8,
+    textAlign: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
   hint: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
     textAlign: "center",
-    marginTop: 12,
+    marginBottom: 8,
   },
-  button: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10 },
+  button: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    alignItems: "center",
+  },
   buttonText: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#fff" },
   buttonGhost: {
     marginTop: 8,
@@ -235,6 +287,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 10,
     borderWidth: 1,
+    alignItems: "center",
+    minHeight: 44,
+    justifyContent: "center",
   },
   buttonGhostText: { fontFamily: "Inter_600SemiBold", fontSize: 16 },
 });

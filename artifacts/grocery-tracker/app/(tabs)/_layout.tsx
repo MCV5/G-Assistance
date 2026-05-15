@@ -7,13 +7,11 @@ import { Feather } from "@expo/vector-icons";
 import React from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
-import { EmailVerificationBanner } from "@/components/EmailVerificationBanner";
 import { useColors } from "@/hooks/useColors";
 
 function NativeTabLayout() {
   return (
     <View style={{ flex: 1 }}>
-      <EmailVerificationBanner />
       <View style={{ flex: 1 }}>
         <NativeTabs>
           <NativeTabs.Trigger name="index">
@@ -51,7 +49,6 @@ function ClassicTabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
-      <EmailVerificationBanner />
       <Tabs
         screenOptions={{
           tabBarActiveTintColor: colors.primary,

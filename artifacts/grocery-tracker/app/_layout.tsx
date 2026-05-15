@@ -75,7 +75,7 @@ function RootLayoutNav() {
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const [onboarded, setOnboarded] = useState<boolean | null>(null);
@@ -89,6 +89,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (isLoading || onboarded === null) return;
     const first = segments[0];
+
+    if (isAuthenticated && user?.emailVerified === false) {
+      if (first !== "verify-email") {
+        router.replace("/verify-email");
+      }
+      return;
+    }
+
     const onPublicRoute =
       first === "login" ||
       first === "forgot-password" ||
@@ -105,7 +113,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     } else if (isAuthenticated && onAuthBumpPublicRoute) {
       router.replace("/");
     }
-  }, [isAuthenticated, isLoading, segments, router, onboarded]);
+  }, [isAuthenticated, isLoading, segments, router, onboarded, user?.emailVerified]);
 
   if (isLoading || onboarded === null) {
     return (

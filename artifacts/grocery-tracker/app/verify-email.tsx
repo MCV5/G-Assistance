@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -20,7 +20,14 @@ export default function VerifyEmailScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string; token?: string }>();
-  const { confirmEmailAddress, isAuthenticated, syncAuthUser } = useAuth();
+  const {
+    confirmEmailAddress,
+    isAuthenticated,
+    syncAuthUser,
+    resendVerificationEmail,
+    logout,
+    user,
+  } = useAuth();
 
   const prefilledEmail = typeof params.email === "string" ? params.email : "";
   const token = typeof params.token === "string" ? params.token : "";
@@ -31,6 +38,11 @@ export default function VerifyEmailScreen() {
     hasLink ? "working" : "idle",
   );
   const [error, setError] = useState<string | null>(null);
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendHint, setResendHint] = useState<string | null>(null);
+
+  const needsEmailConfirmation =
+    isAuthenticated && user?.emailVerified === false && !hasLink;
 
   useEffect(() => {
     if (!hasLink || attemptedRef.current) return;
@@ -58,6 +70,24 @@ export default function VerifyEmailScreen() {
   const goNext = () => {
     router.replace(isAuthenticated ? "/" : "/login");
   };
+
+  const onResend = useCallback(async () => {
+    setResendHint(null);
+    setResendBusy(true);
+    try {
+      await resendVerificationEmail();
+      setResendHint("Sent — check your inbox and spam folder.");
+    } catch {
+      setResendHint("Could not send right now. Try again in a minute.");
+    } finally {
+      setResendBusy(false);
+    }
+  }, [resendVerificationEmail]);
+
+  const onSignOut = useCallback(async () => {
+    await logout();
+    router.replace("/login");
+  }, [logout, router]);
 
   return (
     <ScrollView
@@ -95,12 +125,62 @@ export default function VerifyEmailScreen() {
           <>
             <Text style={[styles.title, { color: colors.foreground }]}>{"Link didn't work"}</Text>
             <Text style={[styles.body, { color: colors.mutedForeground }]}>{error}</Text>
+            {needsEmailConfirmation ? (
+              <>
+                <Pressable
+                  onPress={onResend}
+                  disabled={resendBusy}
+                  style={[styles.button, { backgroundColor: colors.primary }]}
+                >
+                  {resendBusy ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Resend verification email</Text>
+                  )}
+                </Pressable>
+                {resendHint ? (
+                  <Text style={[styles.hint, { color: colors.mutedForeground }]}>{resendHint}</Text>
+                ) : null}
+              </>
+            ) : null}
             <Pressable
               onPress={() => router.back()}
+              style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 12 }]}
+            >
+              <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Back</Text>
+            </Pressable>
+          </>
+        ) : needsEmailConfirmation ? (
+          <>
+            <Text style={[styles.title, { color: colors.foreground }]}>Confirm your email</Text>
+            <Text style={[styles.body, { color: colors.mutedForeground }]}>
+              We sent a welcome message and a separate email with a verification link to{" "}
+              <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
+                {user?.email ?? "your inbox"}
+              </Text>
+              . Open that email and tap the button before using the app.
+            </Text>
+            <Pressable
+              onPress={onResend}
+              disabled={resendBusy}
               style={[styles.button, { backgroundColor: colors.primary }]}
               accessibilityRole="button"
+              accessibilityLabel="Resend verification email"
             >
-              <Text style={styles.buttonText}>Back</Text>
+              {resendBusy ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.buttonText}>Resend verification email</Text>
+              )}
+            </Pressable>
+            {resendHint ? (
+              <Text style={[styles.hint, { color: colors.primary }]}>{resendHint}</Text>
+            ) : null}
+            <Pressable
+              onPress={onSignOut}
+              style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 16 }]}
+            >
+              <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Sign out</Text>
             </Pressable>
           </>
         ) : (
@@ -109,14 +189,14 @@ export default function VerifyEmailScreen() {
               Open your verification link
             </Text>
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              Tap the link in the email we sent you. If something went wrong, use “Resend” from the banner
-              in the app while {"you're"} logged in.
+              Sign in on this device, then use the link in the email we sent. You can resend the
+              email from the verification screen after logging in.
             </Text>
             <Pressable
-              onPress={() => router.replace(isAuthenticated ? "/" : "/login")}
-              style={[styles.buttonGhost, { borderColor: colors.border }]}
+              onPress={() => router.replace("/login")}
+              style={[styles.button, { backgroundColor: colors.primary }]}
             >
-              <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Close</Text>
+              <Text style={styles.buttonText}>Go to sign in</Text>
             </Pressable>
           </>
         )}
@@ -140,6 +220,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     textAlign: "center",
     marginBottom: 16,
+  },
+  hint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    textAlign: "center",
+    marginTop: 12,
   },
   button: { marginTop: 8, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10 },
   buttonText: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#fff" },

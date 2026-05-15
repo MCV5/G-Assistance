@@ -172,6 +172,47 @@ function getVerifyEmailTemplate(link: string): { text: string; html: string } {
   return { text, html };
 }
 
+function getWelcomeEmailTemplate(displayName: string): { text: string; html: string } {
+  const appName = process.env.APP_NAME || "Glowcery App";
+  const safeAppName = escapeHtml(appName);
+  const safeName = escapeHtml(displayName);
+
+  const text =
+    `${appName}\n\n` +
+    `Hi ${displayName},\n\n` +
+    "Thanks for creating an account.\n\n" +
+    "We also sent a separate message with a link to confirm your email. " +
+    "Please tap that link so we know this address is yours.\n\n" +
+    "If you did not sign up, you can ignore this email.";
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1f2937;background:#f8fafc;padding:24px;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+        <tr>
+          <td style="padding:20px 24px;border-bottom:1px solid #e5e7eb;background:#f0fdf4;">
+            <h1 style="margin:0;font-size:20px;color:#14532d;">${safeAppName}</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px;">
+            <h2 style="margin:0 0 12px;font-size:18px;color:#111827;">Welcome, ${safeName}</h2>
+            <p style="margin:0 0 16px;">Thanks for creating an account.</p>
+            <p style="margin:0 0 16px;">
+              We sent a <strong>separate email</strong> with a button to <strong>confirm your email address</strong>.
+              Please use that link so we know this inbox is yours.
+            </p>
+            <p style="margin:0;font-size:13px;color:#6b7280;">
+              If you did not sign up, you can ignore this message.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+
+  return { text, html };
+}
+
 function getMailFrom(): string | undefined {
   return process.env.SMTP_FROM || process.env.EMAIL_FROM;
 }
@@ -264,6 +305,70 @@ async function sendVerificationEmail(email: string, link: string): Promise<boole
     from: getMailFrom(),
     to: email,
     subject: `Confirm your email — ${process.env.APP_NAME || "Glowcery App"}`,
+    text: template.text,
+    html: template.html,
+  });
+  return true;
+}
+
+async function sendWelcomeEmailViaResend(
+  to: string,
+  template: ReturnType<typeof getWelcomeEmailTemplate>,
+): Promise<void> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = getMailFrom();
+  if (!apiKey || !from) {
+    throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
+  }
+
+  const subject = `Welcome to ${process.env.APP_NAME || "Glowcery App"}`;
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text: template.text,
+      html: template.html,
+    }),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as { message?: string };
+  if (!res.ok) {
+    throw new Error(body?.message || `Resend error: ${res.status}`);
+  }
+}
+
+async function sendWelcomeEmail(
+  email: string,
+  firstName: string | null,
+): Promise<boolean> {
+  const displayName = (firstName?.trim() || email.split("@")[0] || "there").trim();
+  const template = getWelcomeEmailTemplate(displayName);
+
+  if (process.env.RESEND_API_KEY && getMailFrom()) {
+    try {
+      await sendWelcomeEmailViaResend(email, template);
+      return true;
+    } catch (err) {
+      console.error("[auth] Resend welcome email failed:", err);
+      return false;
+    }
+  }
+
+  if (!process.env.SMTP_URL || !getMailFrom()) {
+    return false;
+  }
+
+  const transporter = nodemailer.createTransport(process.env.SMTP_URL);
+  await transporter.sendMail({
+    from: getMailFrom(),
+    to: email,
+    subject: `Welcome to ${process.env.APP_NAME || "Glowcery App"}`,
     text: template.text,
     html: template.html,
   });
@@ -388,6 +493,9 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     .returning();
 
   const verifyLink = buildVerifyEmailLink(email, verifyToken);
+  void sendWelcomeEmail(email, firstName).catch((err) => {
+    console.error("[auth] welcome email:", err);
+  });
   void sendVerificationEmail(email, verifyLink).then((ok) => {
     if (!ok && process.env.NODE_ENV !== "production") {
       console.info(`[auth] signup verify-email (dev fallback) for ${email}: ${verifyLink}`);

@@ -139,6 +139,14 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    if (user?.emailVerified === false) {
+      setPantry([]);
+      setScans([]);
+      setShoppingList([]);
+      setLoading(false);
+      return;
+    }
+
     let active = true;
     setLoading(true);
     (async () => {
@@ -168,7 +176,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     return () => {
       active = false;
     };
-  }, [isAuthenticated, authLoading, user?.id, queueSave]);
+  }, [isAuthenticated, authLoading, user?.id, user?.emailVerified, queueSave]);
 
   const persistPantry = useCallback(
     async (next: PantryItem[]) => {

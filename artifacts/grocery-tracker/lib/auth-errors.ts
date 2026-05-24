@@ -99,7 +99,10 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
 
   if (action === "login") {
     if (status === 401 || message.toLowerCase().includes("invalid email or password")) {
-      return "Email or password didn't match. Please try again.";
+      return "Email or password didn't match. Try again or use Forgot password.";
+    }
+    if (status === 403 && message.toLowerCase().includes("confirm your email")) {
+      return "Confirm your email first — check your inbox for the 6-digit code, then try logging in again.";
     }
     return "Couldn't log you in right now. Please try again.";
   }

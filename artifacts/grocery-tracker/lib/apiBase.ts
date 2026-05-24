@@ -1,7 +1,11 @@
 import Constants from "expo-constants";
+import { setBaseUrl } from "@workspace/api-client-react";
 
 const DEFAULT_DEV_API_PORT =
   process.env.EXPO_PUBLIC_API_PORT?.replace(/^:/, "") || "3001";
+
+/** Used when no .env / dev host is available (common with Expo Go testers). */
+export const PRODUCTION_API_URL = "https://g-assistance.onrender.com";
 
 function stripTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, "");
@@ -46,7 +50,7 @@ function apiUrlFromExpoConfig(): string | null {
   return url ? stripTrailingSlashes(url) : null;
 }
 
-export function getApiBaseUrl(): string | null {
+export function getApiBaseUrl(): string {
   const fromEnv =
     process.env.EXPO_PUBLIC_API_URL ||
     (process.env.EXPO_PUBLIC_DOMAIN
@@ -68,5 +72,12 @@ export function getApiBaseUrl(): string | null {
     }
   }
 
-  return null;
+  return PRODUCTION_API_URL;
+}
+
+/** Keep the API client base URL in sync (call on app start and before auth). */
+export function configureApiClient(): string {
+  const base = getApiBaseUrl();
+  setBaseUrl(base);
+  return base;
 }

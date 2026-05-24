@@ -19,7 +19,7 @@ import {
   type AuthUser,
 } from "@workspace/api-client-react";
 
-import { getApiBaseUrl } from "@/lib/apiBase";
+import { configureApiClient } from "@/lib/apiBase";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
 const AUTH_BOOT_TIMEOUT_MS = 6000;
@@ -188,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback<AuthContextValue["login"]>(
     async (email, password) => {
+      configureApiClient();
       const result = await apiLogin({ email, password });
       await handleAuthSuccess(result.token, result.user);
     },
@@ -196,6 +197,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback<AuthContextValue["signup"]>(
     async (email, password, firstName) => {
+      configureApiClient();
       const result = await apiSignup({
         email,
         password,

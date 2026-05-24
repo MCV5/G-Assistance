@@ -17,6 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { boldTheme as D } from "@/constants/colors";
+import { getApiBaseUrl } from "@/lib/apiBase";
 import { getAuthErrorMessage, getAuthErrorStatus } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
 
@@ -213,6 +214,10 @@ export default function LoginScreen() {
             )}
           </Pressable>
 
+          {error ? (
+            <Text style={s.apiHint}>Server: {getApiBaseUrl()}</Text>
+          ) : null}
+
           {mode === "login" ? (
             <Pressable
               style={s.forgotWrap}
@@ -380,6 +385,13 @@ const s = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     fontSize: 12,
     color: "#B91C1C",
+  },
+  apiHint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: D.inkLight,
+    marginTop: 6,
+    marginBottom: 4,
   },
 
   submit: {

@@ -479,8 +479,11 @@ function publicUser(row: typeof usersTable.$inferSelect) {
     lastName: row.lastName,
     profileImageUrl: normalizeProfileImageUrl(row.profileImageUrl),
     createdAt: row.createdAt,
-    dietaryGoals: [...row.dietaryGoals],
-    householdSize: row.householdSize,
+    dietaryGoals: Array.isArray(row.dietaryGoals) ? [...row.dietaryGoals] : [],
+    householdSize:
+      typeof row.householdSize === "number" && row.householdSize >= 1
+        ? row.householdSize
+        : 1,
     emailVerified: isEmailVerifiedRow(row),
   };
 }
@@ -708,7 +711,14 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
 
-  res.json(LoginResponse.parse({ user, token: sid }));
+  const payload = { user, token: sid };
+  const parsedResponse = LoginResponse.safeParse(payload);
+  if (!parsedResponse.success) {
+    console.error("[auth] login response validation:", parsedResponse.error.flatten());
+    res.json(payload);
+    return;
+  }
+  res.json(parsedResponse.data);
 });
 
 router.post("/auth/reset-password", async (req: Request, res: Response) => {

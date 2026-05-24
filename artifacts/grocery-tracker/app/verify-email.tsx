@@ -26,6 +26,8 @@ export default function VerifyEmailScreen() {
     isAuthenticated,
     syncAuthUser,
     resendVerificationEmail,
+    verificationEmailSent,
+    clearVerificationEmailSent,
     logout,
     user,
   } = useAuth();
@@ -92,9 +94,9 @@ export default function VerifyEmailScreen() {
     setResendBusy(true);
     try {
       await resendVerificationEmail();
-      setResendHint("Sent — check your inbox for a new 6-digit code.");
-    } catch {
-      setResendHint("Could not send right now. Try again in a minute.");
+      setResendHint("Sent — check your inbox (and spam) for a new 6-digit code.");
+    } catch (err: unknown) {
+      setResendHint(getAuthErrorMessage(err, "resetPassword"));
     } finally {
       setResendBusy(false);
     }
@@ -161,13 +163,36 @@ export default function VerifyEmailScreen() {
           </>
         ) : needsEmailConfirmation || status === "idle" || status === "error" ? (
           <>
-            <Text style={[styles.title, { color: colors.foreground }]}>Confirm your email</Text>
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              Account created
+            </Text>
+            <Text style={[styles.subtitle, { color: colors.primary }]}>
+              One more step — confirm your email
+            </Text>
+            {verificationEmailSent === false ? (
+              <View
+                style={[
+                  styles.warnBox,
+                  { backgroundColor: colors.background, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.warnTxt, { color: colors.foreground }]}>
+                  We could not send a verification email from the server (email is not
+                  configured on Render yet). Tap Resend after email is set up, or ask the
+                  app owner to verify your account manually.
+                </Text>
+              </View>
+            ) : null}
             <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              We emailed a <Text style={{ fontFamily: "Inter_600SemiBold" }}>6-digit code</Text> to{" "}
+              {verificationEmailSent === false
+                ? "When email works, you will receive a "
+                : "We sent a "}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>6-digit code</Text> to{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
                 {(user?.email ?? emailForConfirm) || "your inbox"}
               </Text>
-              . Enter it below. Links from email often do not open Expo Go — the code always works.
+              . Enter it below. Check spam if you do not see it. Links in email often do not
+              open Expo Go — the code always works.
             </Text>
             <TextInput
               value={codeInput}
@@ -249,7 +274,25 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignSelf: "center",
   },
-  title: { fontFamily: "Inter_600SemiBold", fontSize: 20, textAlign: "center", marginBottom: 10 },
+  title: { fontFamily: "Inter_600SemiBold", fontSize: 20, textAlign: "center", marginBottom: 6 },
+  subtitle: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 14,
+  },
+  warnBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+  },
+  warnTxt: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: "center",
+  },
   body: {
     fontFamily: "Inter_400Regular",
     fontSize: 15,

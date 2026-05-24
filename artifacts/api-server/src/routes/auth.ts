@@ -639,30 +639,33 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   void sendWelcomeEmail(email, firstName).catch((err) => {
     console.error("[auth] welcome email:", err);
   });
-  void sendVerificationEmail(email, {
+  const verificationEmailSent = await sendVerificationEmail(email, {
     token: verification.token,
     code: verification.code,
-  }).then((ok) => {
-    if (!ok && process.env.NODE_ENV !== "production") {
-      console.info(
-        `[auth] signup verify-email (dev fallback) for ${email}: code=${verification.code}`,
-      );
-    }
   });
+  if (!verificationEmailSent) {
+    console.warn(
+      `[auth] verification email NOT sent to ${email} — set RESEND_API_KEY + EMAIL_FROM (or SMTP_URL) on the server. code=${verification.code}`,
+    );
+  }
 
   try {
     const user = publicUser(created);
     const sessionData: SessionData = { user };
     const sid = await createSession(sessionData);
     setSessionCookie(res, sid);
-    const payload = { user, token: sid, recoveryCode };
-    const parsedResponse = SignupResponse.safeParse(payload);
+    const payload = { user, token: sid, recoveryCode, verificationEmailSent };
+    const parsedResponse = SignupResponse.safeParse({
+      user,
+      token: sid,
+      recoveryCode,
+    });
     if (!parsedResponse.success) {
       console.error("[auth] signup response validation:", parsedResponse.error.flatten());
       res.json(payload);
       return;
     }
-    res.json(parsedResponse.data);
+    res.json({ ...parsedResponse.data, verificationEmailSent });
   } catch (err) {
     console.error("[auth] signup session or response failed:", err);
     if (isLikelyMissingSchemaColumnError(err)) {
@@ -946,12 +949,17 @@ router.post("/auth/verify-email/send", async (req: Request, res: Response) => {
     })
     .where(eq(usersTable.id, row.id));
 
-  await sendVerificationEmail(row.email, {
+  const emailSent = await sendVerificationEmail(row.email, {
     token: verification.token,
     code: verification.code,
   });
+  if (!emailSent) {
+    console.warn(
+      `[auth] resend verify-email NOT sent to ${row.email} — configure RESEND_API_KEY + EMAIL_FROM. code=${verification.code}`,
+    );
+  }
 
-  res.json(SendVerificationEmailResponse.parse({ success: true }));
+  res.json({ success: true, emailSent });
 });
 
 export default router;

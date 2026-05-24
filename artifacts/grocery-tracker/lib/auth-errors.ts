@@ -1,6 +1,7 @@
 import { HttpApiError } from "@workspace/api-client-react";
 
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { AuthRequestError } from "@/lib/auth-request";
 
 type AuthAction = "login" | "signup" | "resetPassword";
 
@@ -22,6 +23,10 @@ function normalizeText(value: unknown): string {
 }
 
 function getErrorDetails(error: unknown): { status?: number; message: string } {
+  if (error instanceof AuthRequestError) {
+    return { status: error.status, message: error.message };
+  }
+
   if (error instanceof HttpApiError) {
     const data = error.data as { error?: string; message?: string } | null;
     return {
@@ -117,7 +122,7 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
     if (status === 503 && message) {
       return message;
     }
-    if (status === 500 && message && message.length > 0 && message.length < 220) {
+    if (message && message.length > 0 && message.length < 240) {
       return message;
     }
     return "Couldn't create your account right now. Please try again.";

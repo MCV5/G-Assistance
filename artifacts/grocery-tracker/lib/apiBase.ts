@@ -65,6 +65,11 @@ export function getApiBaseUrl(): string {
     return fromConfig;
   }
 
+  // Prefer production over LAN :3001 — Expo Go often has a dev host but no local API.
+  if (!wantsLocalApi()) {
+    return PRODUCTION_API_URL;
+  }
+
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     const host = expoDevHost();
     if (host) {
@@ -73,6 +78,13 @@ export function getApiBaseUrl(): string {
   }
 
   return PRODUCTION_API_URL;
+}
+
+function wantsLocalApi(): boolean {
+  const flag = process.env.EXPO_PUBLIC_USE_LOCAL_API?.trim().toLowerCase();
+  if (flag === "1" || flag === "true" || flag === "yes") return true;
+  const url = process.env.EXPO_PUBLIC_API_URL?.trim();
+  return Boolean(url && /^https?:\/\//i.test(url) && /localhost|127\.0\.0\.1/i.test(url));
 }
 
 /** Keep the API client base URL in sync (call on app start and before auth). */

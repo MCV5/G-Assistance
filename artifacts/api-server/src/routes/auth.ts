@@ -27,6 +27,7 @@ import {
 const router: IRouter = Router();
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
 const EMAIL_VERIFY_TTL_MS = 72 * 60 * 60 * 1000;
+const DEFAULT_APP_NAME = "Goalcery";
 
 const RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
@@ -75,7 +76,7 @@ function buildVerifyEmailWebLink(email: string, token: string): string {
 }
 
 function buildVerifyAppDeepLink(email: string, code: string): string {
-  const scheme = process.env.APP_DEEP_LINK_SCHEME || "glowcery";
+  const scheme = process.env.APP_DEEP_LINK_SCHEME || "goalcery";
   const q = new URLSearchParams({ email, code });
   return `${scheme}://verify-email?${q.toString()}`;
 }
@@ -108,7 +109,7 @@ function escapeHtml(value: string): string {
 }
 
 function getResetEmailTemplate(link: string): { text: string; html: string } {
-  const appName = process.env.APP_NAME || "Glowcery App";
+  const appName = process.env.APP_NAME || DEFAULT_APP_NAME;
   const safeAppName = escapeHtml(appName);
   const safeLink = escapeHtml(link);
 
@@ -156,7 +157,7 @@ function getVerifyEmailTemplate(opts: {
   webLink: string;
   appLink: string;
 }): { text: string; html: string } {
-  const appName = process.env.APP_NAME || "Glowcery App";
+  const appName = process.env.APP_NAME || DEFAULT_APP_NAME;
   const safeAppName = escapeHtml(appName);
   const safeCode = escapeHtml(opts.code);
   const safeWebLink = escapeHtml(opts.webLink);
@@ -166,7 +167,7 @@ function getVerifyEmailTemplate(opts: {
     `${appName}\n\n` +
     "Confirm your email address to finish setting up your account.\n\n" +
     `Your verification code: ${opts.code}\n\n` +
-    "Open the Glowcery app, go to the verify-email screen, and enter this code.\n\n" +
+    `Open the ${appName} app, go to the verify-email screen, and enter this code.\n\n` +
     `Or open in the app: ${opts.appLink}\n\n` +
     `Or use this web link: ${opts.webLink}\n\n` +
     "This code expires in 72 hours. If you did not create an account, you can ignore this email.";
@@ -208,7 +209,7 @@ function getVerifyEmailTemplate(opts: {
 }
 
 function getWelcomeEmailTemplate(displayName: string): { text: string; html: string } {
-  const appName = process.env.APP_NAME || "Glowcery App";
+  const appName = process.env.APP_NAME || DEFAULT_APP_NAME;
   const safeAppName = escapeHtml(appName);
   const safeName = escapeHtml(displayName);
 
@@ -262,7 +263,7 @@ async function sendResetEmailViaResend(
     throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
   }
 
-  const subject = `Reset your ${process.env.APP_NAME || "Glowcery App"} password`;
+  const subject = `Reset your ${process.env.APP_NAME || DEFAULT_APP_NAME} password`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -294,7 +295,7 @@ async function sendVerifyEmailViaResend(
     throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
   }
 
-  const subject = `Confirm your email — ${process.env.APP_NAME || "Glowcery App"}`;
+  const subject = `Confirm your email — ${process.env.APP_NAME || DEFAULT_APP_NAME}`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -352,7 +353,7 @@ async function sendVerificationEmail(
   await transporter.sendMail({
     from: getMailFrom(),
     to: email,
-    subject: `Confirm your email — ${process.env.APP_NAME || "Glowcery App"}`,
+    subject: `Confirm your email — ${process.env.APP_NAME || DEFAULT_APP_NAME}`,
     text: template.text,
     html: template.html,
   });
@@ -369,7 +370,7 @@ async function sendWelcomeEmailViaResend(
     throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
   }
 
-  const subject = `Welcome to ${process.env.APP_NAME || "Glowcery App"}`;
+  const subject = `Welcome to ${process.env.APP_NAME || DEFAULT_APP_NAME}`;
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -416,7 +417,7 @@ async function sendWelcomeEmail(
   await transporter.sendMail({
     from: getMailFrom(),
     to: email,
-    subject: `Welcome to ${process.env.APP_NAME || "Glowcery App"}`,
+    subject: `Welcome to ${process.env.APP_NAME || DEFAULT_APP_NAME}`,
     text: template.text,
     html: template.html,
   });
@@ -446,7 +447,7 @@ async function sendResetEmail(email: string, link: string): Promise<boolean> {
   await transporter.sendMail({
     from: getMailFrom(),
     to: email,
-    subject: `Reset your ${process.env.APP_NAME || "Glowcery App"} password`,
+    subject: `Reset your ${process.env.APP_NAME || DEFAULT_APP_NAME} password`,
     text: template.text,
     html: template.html,
   });
@@ -478,8 +479,11 @@ function publicUser(row: typeof usersTable.$inferSelect) {
     lastName: row.lastName,
     profileImageUrl: normalizeProfileImageUrl(row.profileImageUrl),
     createdAt: row.createdAt,
-    dietaryGoals: [...row.dietaryGoals],
-    householdSize: row.householdSize,
+    dietaryGoals: Array.isArray(row.dietaryGoals) ? [...row.dietaryGoals] : [],
+    householdSize:
+      typeof row.householdSize === "number" && row.householdSize >= 1
+        ? row.householdSize
+        : 1,
     emailVerified: isEmailVerifiedRow(row),
   };
 }
@@ -707,7 +711,14 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);
 
-  res.json(LoginResponse.parse({ user, token: sid }));
+  const payload = { user, token: sid };
+  const parsedResponse = LoginResponse.safeParse(payload);
+  if (!parsedResponse.success) {
+    console.error("[auth] login response validation:", parsedResponse.error.flatten());
+    res.json(payload);
+    return;
+  }
+  res.json(parsedResponse.data);
 });
 
 router.post("/auth/reset-password", async (req: Request, res: Response) => {

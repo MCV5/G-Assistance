@@ -1,7 +1,11 @@
 import Constants from "expo-constants";
+import { setBaseUrl } from "@workspace/api-client-react";
 
 const DEFAULT_DEV_API_PORT =
   process.env.EXPO_PUBLIC_API_PORT?.replace(/^:/, "") || "3001";
+
+/** Used when no .env / dev host is available (common with Expo Go testers). */
+export const PRODUCTION_API_URL = "https://g-assistance.onrender.com";
 
 function stripTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, "");
@@ -46,7 +50,7 @@ function apiUrlFromExpoConfig(): string | null {
   return url ? stripTrailingSlashes(url) : null;
 }
 
-export function getApiBaseUrl(): string | null {
+export function getApiBaseUrl(): string {
   const fromEnv =
     process.env.EXPO_PUBLIC_API_URL ||
     (process.env.EXPO_PUBLIC_DOMAIN
@@ -61,6 +65,11 @@ export function getApiBaseUrl(): string | null {
     return fromConfig;
   }
 
+  // Prefer production over LAN :3001 — Expo Go often has a dev host but no local API.
+  if (!wantsLocalApi()) {
+    return PRODUCTION_API_URL;
+  }
+
   if (typeof __DEV__ !== "undefined" && __DEV__) {
     const host = expoDevHost();
     if (host) {
@@ -68,5 +77,19 @@ export function getApiBaseUrl(): string | null {
     }
   }
 
-  return null;
+  return PRODUCTION_API_URL;
+}
+
+function wantsLocalApi(): boolean {
+  const flag = process.env.EXPO_PUBLIC_USE_LOCAL_API?.trim().toLowerCase();
+  if (flag === "1" || flag === "true" || flag === "yes") return true;
+  const url = process.env.EXPO_PUBLIC_API_URL?.trim();
+  return Boolean(url && /^https?:\/\//i.test(url) && /localhost|127\.0\.0\.1/i.test(url));
+}
+
+/** Keep the API client base URL in sync (call on app start and before auth). */
+export function configureApiClient(): string {
+  const base = getApiBaseUrl();
+  setBaseUrl(base);
+  return base;
 }

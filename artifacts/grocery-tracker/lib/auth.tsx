@@ -11,15 +11,16 @@ import * as SecureStore from "expo-secure-store";
 import {
   confirmEmailVerification as apiConfirmEmailVerification,
   getCurrentAuthUser,
-  login as apiLogin,
   logout as apiLogout,
   regenerateRecoveryCode as apiRegenerateRecoveryCode,
   sendVerificationEmail as apiSendVerificationEmail,
-  signup as apiSignup,
+  type AuthSuccess,
   type AuthUser,
+  type SignupSuccess,
 } from "@workspace/api-client-react";
 
-import { getApiBaseUrl } from "@/lib/apiBase";
+import { configureApiClient } from "@/lib/apiBase";
+import { authPost } from "@/lib/auth-request";
 
 const AUTH_TOKEN_KEY = "auth_session_token";
 const AUTH_BOOT_TIMEOUT_MS = 6000;
@@ -47,22 +48,7 @@ async function postPublicAuthJson<T>(
   path: string,
   body: Record<string, unknown>,
 ): Promise<T> {
-  const base = getApiBaseUrl();
-  if (!base) {
-    throw new Error(
-      "API is not configured. Set EXPO_PUBLIC_API_URL, or run the app in development with the API server (pnpm dev:api) on the default port.",
-    );
-  }
-  const response = await fetch(`${base}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = (await response.json()) as T & { error?: string };
-  if (!response.ok) {
-    throw new Error(data?.error || "Request failed.");
-  }
-  return data;
+  return authPost<T>(path, body);
 }
 
 interface AuthContextValue {
@@ -188,7 +174,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback<AuthContextValue["login"]>(
     async (email, password) => {
-      const result = await apiLogin({ email, password });
+      const result = await authPost<AuthSuccess>("/api/auth/login", {
+        email,
+        password,
+      });
       await handleAuthSuccess(result.token, result.user);
     },
     [handleAuthSuccess],
@@ -196,11 +185,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback<AuthContextValue["signup"]>(
     async (email, password, firstName) => {
-      const result = await apiSignup({
-        email,
-        password,
-        firstName: firstName?.trim() || undefined,
-      });
+      const payload: Record<string, unknown> = { email, password };
+      const trimmedName = firstName?.trim();
+      if (trimmedName) payload.firstName = trimmedName;
+
+      const result = await authPost<SignupSuccess>("/api/auth/signup", payload);
       setPendingRecoveryCode(result.recoveryCode);
       await handleAuthSuccess(result.token, result.user);
     },

@@ -7,7 +7,7 @@ import {
 } from "@expo-google-fonts/inter";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
+import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
@@ -19,15 +19,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PantryProvider } from "@/contexts/PantryContext";
-import { getApiBaseUrl } from "@/lib/apiBase";
+import { configureApiClient } from "@/lib/apiBase";
 import { AuthProvider, useAuth } from "@/lib/auth";
 
 SplashScreen.preventAutoHideAsync();
 
-const _apiBase = getApiBaseUrl();
-if (_apiBase) {
-  setBaseUrl(_apiBase);
-}
+configureApiClient();
 
 setAuthTokenGetter(async () => {
   try {
@@ -134,6 +131,10 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    configureApiClient();
+  }, []);
+
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,

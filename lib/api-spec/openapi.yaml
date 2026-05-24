@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Glowcery App API
+  title: Goalcery API
   version: 0.1.0
 servers:
   - url: /api

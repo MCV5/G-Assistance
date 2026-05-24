@@ -61,10 +61,15 @@ function isUrl(input: RequestInfo | URL): input is URL {
 }
 
 function applyBaseUrl(input: RequestInfo | URL): RequestInfo | URL {
-  if (!_baseUrl) return input;
   const url = resolveUrl(input);
   // Only prepend to relative paths (starting with /)
   if (!url.startsWith("/")) return input;
+
+  if (!_baseUrl) {
+    throw new Error(
+      "API is not configured. Set EXPO_PUBLIC_API_URL or restart the app so the API client can connect.",
+    );
+  }
 
   const absolute = `${_baseUrl}${url}`;
   if (typeof input === "string") return absolute;

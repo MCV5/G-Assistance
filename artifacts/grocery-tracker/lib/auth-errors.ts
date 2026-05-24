@@ -1,6 +1,7 @@
 import { HttpApiError } from "@workspace/api-client-react";
 
 import { getApiBaseUrl } from "@/lib/apiBase";
+import { AuthRequestError } from "@/lib/auth-request";
 
 type AuthAction = "login" | "signup" | "resetPassword";
 
@@ -22,6 +23,10 @@ function normalizeText(value: unknown): string {
 }
 
 function getErrorDetails(error: unknown): { status?: number; message: string } {
+  if (error instanceof AuthRequestError) {
+    return { status: error.status, message: error.message };
+  }
+
   if (error instanceof HttpApiError) {
     const data = error.data as { error?: string; message?: string } | null;
     return {
@@ -99,7 +104,10 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
 
   if (action === "login") {
     if (status === 401 || message.toLowerCase().includes("invalid email or password")) {
-      return "Email or password didn't match. Please try again.";
+      return "Email or password didn't match. Try again or use Forgot password.";
+    }
+    if (status === 403 && message.toLowerCase().includes("confirm your email")) {
+      return "Confirm your email first — check your inbox for the 6-digit code, then try logging in again.";
     }
     return "Couldn't log you in right now. Please try again.";
   }
@@ -114,7 +122,7 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
     if (status === 503 && message) {
       return message;
     }
-    if (status === 500 && message && message.length > 0 && message.length < 220) {
+    if (message && message.length > 0 && message.length < 240) {
       return message;
     }
     return "Couldn't create your account right now. Please try again.";

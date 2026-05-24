@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Glowcery App",
-    "slug": "glowcery-app",
+    "name": "Goalcery",
+    "slug": "goalcery-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "glowcery",
+    "scheme": "goalcery",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,10 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.glowcery.app"
+      "bundleIdentifier": "com.goalcery.app"
     },
     "android": {
-      "package": "com.glowcery.app",
+      "package": "com.goalcery.app",
       "usesCleartextTraffic": true
     },
     "web": {
@@ -36,7 +36,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Glowcery App to use the camera to scan barcodes."
+          "cameraPermission": "Allow Goalcery to use the camera to scan barcodes."
         }
       ]
     ],

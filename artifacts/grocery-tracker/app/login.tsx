@@ -122,10 +122,10 @@ export default function LoginScreen() {
 
           {/* Brand header */}
           <View style={s.header}>
-            <Text style={s.eyebrow}>GROCERY TRACKER</Text>
+            <Text style={s.eyebrow}>GOALCERY</Text>
             <Text style={s.headline}>
-              {"TRACK "}
-              <Text style={s.headlineAccent}>SMARTER.</Text>
+              {"TRACK YOUR "}
+              <Text style={s.headlineAccent}>GOALS.</Text>
             </Text>
           </View>
 

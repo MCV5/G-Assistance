@@ -9,7 +9,6 @@ import React, {
 import * as SecureStore from "expo-secure-store";
 
 import {
-  confirmEmailVerification as apiConfirmEmailVerification,
   getCurrentAuthUser,
   logout as apiLogout,
   regenerateRecoveryCode as apiRegenerateRecoveryCode,
@@ -262,21 +261,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     AuthContextValue["confirmEmailAddress"]
   >(async (email, options) => {
     const normalizedEmail = email.trim().toLowerCase();
+    const body: Record<string, unknown> = { email: normalizedEmail };
     if (options.code) {
-      await apiConfirmEmailVerification({
-        email: normalizedEmail,
-        code: options.code.replace(/\D/g, "").slice(0, 6),
-      });
-      return;
+      body.code = options.code.replace(/\D/g, "").slice(0, 6);
+    } else if (options.token) {
+      body.token = options.token;
+    } else {
+      throw new Error("Enter the 6-digit code from your email.");
     }
-    if (options.token) {
-      await apiConfirmEmailVerification({
-        email: normalizedEmail,
-        token: options.token,
-      });
-      return;
-    }
-    throw new Error("Enter the 6-digit code from your email.");
+    await authPost<{ success: boolean }>("/api/auth/verify-email/confirm", body);
   }, []);
 
   const resendVerificationEmail = useCallback<

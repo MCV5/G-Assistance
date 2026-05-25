@@ -3,6 +3,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,69 +30,79 @@ export default function VerifyEmailScreen() {
     resendVerificationEmail,
     verificationEmailSent,
     verificationEmailError,
-    clearVerificationEmailSent,
     logout,
     user,
   } = useAuth();
 
-  const paramEmail = typeof params.email === "string" ? params.email : "";
+  const paramEmail = typeof params.email === "string" ? params.email.trim().toLowerCase() : "";
   const paramToken = typeof params.token === "string" ? params.token : "";
   const paramCode = typeof params.code === "string" ? params.code.replace(/\D/g, "") : "";
 
-  const [codeInput, setCodeInput] = useState(paramCode.length === 6 ? paramCode : "");
+  const [codeInput, setCodeInput] = useState(
+    paramCode.length >= 6 && paramCode.length <= 6 ? paramCode : "",
+  );
   const emailForConfirm = (user?.email ?? paramEmail).trim().toLowerCase();
 
-  const attemptedRef = useRef(false);
-  const hasAutoConfirm =
-    Boolean(emailForConfirm) &&
-    (paramToken.length >= 20 || paramCode.length === 6);
-  const [status, setStatus] = useState<"idle" | "working" | "done" | "error">(
-    hasAutoConfirm ? "working" : "idle",
-  );
+  const attemptedAutoRef = useRef(false);
+  const inputRef = useRef<TextInput>(null);
+
+  const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [resendBusy, setResendBusy] = useState(false);
   const [resendHint, setResendHint] = useState<string | null>(null);
   const [submitBusy, setSubmitBusy] = useState(false);
 
-  const needsEmailConfirmation =
-    isAuthenticated && user?.emailVerified === false && !hasAutoConfirm;
-
   const runConfirm = useCallback(
     async (opts: { token?: string; code?: string }) => {
-      if (!emailForConfirm) {
-        setError("Sign in first, then enter the code from your email.");
+      const email = emailForConfirm || paramEmail;
+      if (!email) {
+        setError("Enter your email on the Log in screen first, then come back here.");
         setStatus("error");
         return;
       }
       setStatus("working");
       setError(null);
       try {
-        await confirmEmailAddress(emailForConfirm, opts);
-        await syncAuthUser();
+        await confirmEmailAddress(email, opts);
+        if (isAuthenticated) {
+          await syncAuthUser();
+        }
         setStatus("done");
       } catch (err: unknown) {
         setStatus("error");
         setError(getAuthErrorMessage(err, "resetPassword"));
       }
     },
-    [confirmEmailAddress, emailForConfirm, syncAuthUser],
+    [confirmEmailAddress, emailForConfirm, paramEmail, syncAuthUser, isAuthenticated],
   );
 
   useEffect(() => {
-    if (!hasAutoConfirm || attemptedRef.current) return;
-    attemptedRef.current = true;
+    const autoCode =
+      paramCode.length === 6 ? paramCode : codeInput.length === 6 ? codeInput : "";
+    const autoToken = paramToken.length >= 20 ? paramToken : "";
+    if (attemptedAutoRef.current) return;
+    if (!emailForConfirm && !paramEmail) return;
+    if (autoCode.length !== 6 && autoToken.length < 20) return;
+
+    attemptedAutoRef.current = true;
     void runConfirm(
-      paramCode.length === 6
-        ? { code: paramCode }
-        : { token: paramToken },
+      autoCode.length === 6 ? { code: autoCode } : { token: autoToken },
     );
-  }, [hasAutoConfirm, paramCode, paramToken, runConfirm]);
+  }, [emailForConfirm, paramEmail, paramCode, paramToken, codeInput, runConfirm]);
 
   const goNext = () => {
-    router.replace(isAuthenticated ? "/" : "/login");
+    if (isAuthenticated) {
+      router.replace("/");
+    } else {
+      router.replace("/login");
+    }
   };
 
   const onResend = useCallback(async () => {
+    if (!isAuthenticated) {
+      setResendHint("Log in first, then tap Resend code.");
+      return;
+    }
     setResendHint(null);
     setResendBusy(true);
     try {
@@ -101,12 +113,12 @@ export default function VerifyEmailScreen() {
     } finally {
       setResendBusy(false);
     }
-  }, [resendVerificationEmail]);
+  }, [isAuthenticated, resendVerificationEmail]);
 
   const onSubmitCode = useCallback(async () => {
     const digits = codeInput.replace(/\D/g, "");
     if (digits.length !== 6) {
-      setError("Enter the 6-digit code from your email.");
+      setError("Enter all 6 digits from your email.");
       return;
     }
     setSubmitBusy(true);
@@ -119,155 +131,170 @@ export default function VerifyEmailScreen() {
     router.replace("/login");
   }, [logout, router]);
 
+  const busy = status === "working" || submitBusy;
+  const digitsOnly = codeInput.replace(/\D/g, "");
+  const canVerify = digitsOnly.length === 6 && !busy;
+
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
-      ]}
-      keyboardShouldPersistTaps="handled"
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={insets.top + 12}
     >
-      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Feather name="mail" size={40} color={colors.primary} style={{ marginBottom: 12 }} />
-        {status === "working" ? (
-          <>
-            <Text style={[styles.title, { color: colors.foreground }]}>
-              Verifying your email…
-            </Text>
-            <ActivityIndicator color={colors.primary} style={{ marginTop: 20 }} />
-          </>
-        ) : status === "done" ? (
-          <>
-            <Text style={[styles.title, { color: colors.foreground }]}>{"You're verified"}</Text>
-            <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              Thanks — your email is confirmed.
-            </Text>
-            <Pressable
-              onPress={goNext}
-              style={[styles.button, { backgroundColor: colors.primary }]}
-              accessibilityRole="button"
-              accessibilityLabel="Continue"
-            >
-              <Text style={styles.buttonText}>Continue</Text>
-            </Pressable>
-          </>
-        ) : status === "error" && !needsEmailConfirmation ? (
-          <>
-            <Text style={[styles.title, { color: colors.foreground }]}>{"Couldn't verify"}</Text>
-            <Text style={[styles.body, { color: colors.mutedForeground }]}>{error}</Text>
-            <Pressable
-              onPress={() => setStatus("idle")}
-              style={[styles.button, { backgroundColor: colors.primary }]}
-            >
-              <Text style={styles.buttonText}>Try again</Text>
-            </Pressable>
-          </>
-        ) : needsEmailConfirmation || status === "idle" || status === "error" ? (
-          <>
-            <Text style={[styles.title, { color: colors.foreground }]}>
-              Account created
-            </Text>
-            <Text style={[styles.subtitle, { color: colors.primary }]}>
-              One more step — confirm your email
-            </Text>
-            {verificationEmailSent === false ? (
-              <View
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="always"
+      >
+        <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Feather name="mail" size={40} color={colors.primary} style={{ marginBottom: 12 }} />
+
+          {status === "done" ? (
+            <>
+              <Text style={[styles.title, { color: colors.foreground }]}>{"You're verified"}</Text>
+              <Text style={[styles.body, { color: colors.mutedForeground }]}>
+                Thanks — your email is confirmed. You can use the app now.
+              </Text>
+              <Pressable
+                onPress={goNext}
+                style={[styles.button, { backgroundColor: colors.primary }]}
+              >
+                <Text style={styles.buttonText}>Continue to app</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.title, { color: colors.foreground }]}>Confirm your email</Text>
+              <Text style={[styles.subtitle, { color: colors.primary }]}>
+                {isAuthenticated ? "Account ready — enter your code" : "Log in, then enter your code"}
+              </Text>
+
+              {!isAuthenticated ? (
+                <Pressable
+                  onPress={() => router.replace("/login")}
+                  style={[styles.button, { backgroundColor: colors.primary, marginBottom: 12 }]}
+                >
+                  <Text style={styles.buttonText}>Go to Log in</Text>
+                </Pressable>
+              ) : null}
+
+              {verificationEmailSent === false ? (
+                <View style={[styles.warnBox, { borderColor: colors.border }]}>
+                  <Text style={[styles.warnTxt, { color: colors.foreground }]}>
+                    Email could not be sent from the server.
+                    {verificationEmailError ? `\n\n${verificationEmailError}` : ""}
+                  </Text>
+                </View>
+              ) : null}
+
+              <Text style={[styles.body, { color: colors.mutedForeground }]}>
+                Enter the <Text style={{ fontFamily: "Inter_600SemiBold" }}>6-digit code</Text>{" "}
+                sent to{" "}
+                <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }]}>
+                  {emailForConfirm || paramEmail || "your email"}
+                </Text>
+                . Email links do not open Expo Go — typing the code here always works.
+              </Text>
+
+              <Pressable
+                onPress={() => inputRef.current?.focus()}
+                style={styles.codeTapTarget}
+              >
+                <TextInput
+                  ref={inputRef}
+                  value={codeInput}
+                  onChangeText={(t) => {
+                    setCodeInput(t.replace(/\D/g, "").slice(0, 6));
+                    setError(null);
+                    if (status === "error") setStatus("idle");
+                  }}
+                  placeholder="123456"
+                  placeholderTextColor={colors.mutedForeground}
+                  keyboardType="number-pad"
+                  inputMode="numeric"
+                  maxLength={6}
+                  editable={!busy}
+                  autoFocus
+                  selectTextOnFocus
+                  textContentType="oneTimeCode"
+                  autoComplete={Platform.OS === "android" ? "sms-otp" : "one-time-code"}
+                  importantForAutofill="yes"
+                  style={[
+                    styles.codeInput,
+                    {
+                      borderColor: error ? colors.destructive : colors.border,
+                      color: colors.foreground,
+                      backgroundColor: colors.background,
+                    },
+                  ]}
+                  accessibilityLabel="Six digit verification code"
+                />
+              </Pressable>
+
+              <Text style={[styles.tapHint, { color: colors.mutedForeground }]}>
+                Tap the box above if the keyboard does not appear
+              </Text>
+
+              {busy ? (
+                <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} />
+              ) : null}
+
+              {error ? (
+                <Text style={[styles.hint, { color: colors.destructive }]}>{error}</Text>
+              ) : null}
+
+              <Pressable
+                onPress={onSubmitCode}
+                disabled={!canVerify}
                 style={[
-                  styles.warnBox,
-                  { backgroundColor: colors.background, borderColor: colors.border },
+                  styles.button,
+                  {
+                    backgroundColor: colors.primary,
+                    opacity: canVerify ? 1 : 0.45,
+                  },
                 ]}
               >
-                <Text style={[styles.warnTxt, { color: colors.foreground }]}>
-                  We could not send a verification email from the server.
-                  {verificationEmailError
-                    ? `\n\nServer: ${verificationEmailError}`
-                    : ""}
-                  {"\n\n"}Tap Resend after fixing Render → Resend settings, or ask the app
-                  owner to verify your account in the database.
-                </Text>
-              </View>
-            ) : null}
-            <Text style={[styles.body, { color: colors.mutedForeground }]}>
-              {verificationEmailSent === false
-                ? "When email works, you will receive a "
-                : "We sent a "}
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>6-digit code</Text> to{" "}
-              <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }}>
-                {(user?.email ?? emailForConfirm) || "your inbox"}
-              </Text>
-              . Enter it below. Check spam if you do not see it. Links in email often do not
-              open Expo Go — the code always works.
-            </Text>
-            <TextInput
-              value={codeInput}
-              onChangeText={(t) => {
-                setCodeInput(t.replace(/\D/g, "").slice(0, 6));
-                setError(null);
-              }}
-              placeholder="000000"
-              placeholderTextColor={colors.mutedForeground}
-              keyboardType="number-pad"
-              maxLength={6}
-              style={[
-                styles.codeInput,
-                {
-                  borderColor: colors.border,
-                  color: colors.foreground,
-                  backgroundColor: colors.background,
-                },
-              ]}
-              accessibilityLabel="Verification code"
-            />
-            {error ? (
-              <Text style={[styles.hint, { color: colors.destructive }]}>{error}</Text>
-            ) : null}
-            <Pressable
-              onPress={onSubmitCode}
-              disabled={submitBusy || codeInput.length !== 6}
-              style={[
-                styles.button,
-                {
-                  backgroundColor: colors.primary,
-                  opacity: codeInput.length === 6 ? 1 : 0.5,
-                },
-              ]}
-            >
-              {submitBusy ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Verify</Text>
-              )}
-            </Pressable>
-            <Pressable
-              onPress={onResend}
-              disabled={resendBusy}
-              style={[styles.buttonGhost, { borderColor: colors.border }]}
-            >
-              {resendBusy ? (
-                <ActivityIndicator color={colors.primary} />
-              ) : (
-                <Text style={[styles.buttonGhostText, { color: colors.primary }]}>
-                  Resend code
-                </Text>
-              )}
-            </Pressable>
-            {resendHint ? (
-              <Text style={[styles.hint, { color: colors.primary }]}>{resendHint}</Text>
-            ) : null}
-            <Pressable
-              onPress={onSignOut}
-              style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 8 }]}
-            >
-              <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Sign out</Text>
-            </Pressable>
-          </>
-        ) : null}
-      </View>
-    </ScrollView>
+                <Text style={styles.buttonText}>Verify email</Text>
+              </Pressable>
+
+              <Pressable
+                onPress={onResend}
+                disabled={resendBusy || !isAuthenticated}
+                style={[
+                  styles.buttonGhost,
+                  { borderColor: colors.border, opacity: isAuthenticated ? 1 : 0.5 },
+                ]}
+              >
+                {resendBusy ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Text style={[styles.buttonGhostText, { color: colors.primary }]}>
+                    Resend code
+                  </Text>
+                )}
+              </Pressable>
+              {resendHint ? (
+                <Text style={[styles.hint, { color: colors.primary }]}>{resendHint}</Text>
+              ) : null}
+
+              <Pressable
+                onPress={onSignOut}
+                style={[styles.buttonGhost, { borderColor: colors.border, marginTop: 8 }]}
+              >
+                <Text style={[styles.buttonGhostText, { color: colors.primary }]}>Sign out</Text>
+              </Pressable>
+            </>
+          )}
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: { flex: 1 },
   container: { flexGrow: 1, paddingHorizontal: 20, justifyContent: "center" },
   card: {
     borderRadius: 16,
@@ -290,6 +317,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
     marginBottom: 14,
+    backgroundColor: "#FEF9C3",
   },
   warnTxt: {
     fontFamily: "Inter_400Regular",
@@ -304,14 +332,23 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 16,
   },
+  codeTapTarget: { width: "100%" },
   codeInput: {
     fontFamily: "Inter_600SemiBold",
-    fontSize: 28,
-    letterSpacing: 8,
+    fontSize: 32,
+    letterSpacing: 10,
     textAlign: "center",
-    borderWidth: 1,
+    borderWidth: 2,
     borderRadius: 12,
-    paddingVertical: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    minHeight: 64,
+  },
+  tapHint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    textAlign: "center",
     marginBottom: 12,
   },
   hint: {
@@ -322,10 +359,12 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 10,
     alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
   },
   buttonText: { fontFamily: "Inter_600SemiBold", fontSize: 16, color: "#fff" },
   buttonGhost: {

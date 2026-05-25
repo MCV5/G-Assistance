@@ -67,10 +67,13 @@ export default function LoginScreen() {
     }
     try {
       setSubmitting(true);
+      const normalizedEmail = email.trim().toLowerCase();
       if (mode === "signup") {
-        await signup(email.trim().toLowerCase(), password, firstName);
+        await signup(normalizedEmail, password, firstName);
+        router.replace(`/verify-email?email=${encodeURIComponent(normalizedEmail)}`);
       } else {
-        await login(email.trim().toLowerCase(), password);
+        await login(normalizedEmail, password);
+        router.replace(`/verify-email?email=${encodeURIComponent(normalizedEmail)}`);
       }
     } catch (err: unknown) {
       const authAction = mode === "signup" ? "signup" : "login";
@@ -224,6 +227,19 @@ export default function LoginScreen() {
           {error ? (
             <Text style={s.apiHint}>Server: {getApiBaseUrl()}</Text>
           ) : null}
+
+          <Pressable
+            style={s.forgotWrap}
+            onPress={() =>
+              router.push(
+                email.trim()
+                  ? `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`
+                  : "/verify-email",
+              )
+            }
+          >
+            <Text style={s.forgotTxt}>Have a 6-digit code from email?</Text>
+          </Pressable>
 
           {mode === "login" ? (
             <Pressable

@@ -75,7 +75,14 @@ export default function LoginScreen() {
     } catch (err: unknown) {
       const authAction = mode === "signup" ? "signup" : "login";
       const message = getAuthErrorMessage(err, authAction);
-      if (mode === "signup" && getAuthErrorStatus(err) === 409) {
+      const status = getAuthErrorStatus(err);
+      if (
+        status === 403 &&
+        message.toLowerCase().includes("verification")
+      ) {
+        setError(message);
+        router.replace("/verify-email");
+      } else if (mode === "signup" && status === 409) {
         switchMode("login");
         setError(message);
       } else {

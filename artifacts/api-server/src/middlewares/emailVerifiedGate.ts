@@ -1,10 +1,16 @@
 import type { NextFunction, Request, Response } from "express";
 
-/** Authenticated routes allowed before email is confirmed. */
+/** Auth routes that must work even when logged in but email is not confirmed yet. */
 const ALLOW_WHILE_EMAIL_PENDING = new Set([
   "/api/auth/user",
   "/api/auth/logout",
+  "/api/auth/login",
+  "/api/auth/signup",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
   "/api/auth/verify-email/send",
+  "/api/auth/verify-email/confirm",
+  "/api/auth/recovery-code",
 ]);
 
 function normalizePath(url: string): string {

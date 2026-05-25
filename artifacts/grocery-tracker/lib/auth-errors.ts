@@ -113,6 +113,12 @@ export function getAuthErrorMessage(error: unknown, action: AuthAction): string 
   }
 
   if (action === "signup") {
+    if (
+      status === 403 &&
+      message.toLowerCase().includes("confirm your email")
+    ) {
+      return "This email already has an account waiting for verification. Switch to Log in, or open the verify-email screen and enter your 6-digit code.";
+    }
     if (status === 409 || message.toLowerCase().includes("already exists")) {
       return "That email is already registered. Try logging in instead.";
     }

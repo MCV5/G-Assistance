@@ -186,6 +186,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback<AuthContextValue["login"]>(
     async (email, password) => {
+      await clearToken();
+      setUser(null);
       const result = await authPost<AuthSuccess>("/api/auth/login", {
         email,
         password,
@@ -197,6 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback<AuthContextValue["signup"]>(
     async (email, password, firstName) => {
+      await clearToken();
+      setUser(null);
       const payload: Record<string, unknown> = { email, password };
       const trimmedName = firstName?.trim();
       if (trimmedName) payload.firstName = trimmedName;

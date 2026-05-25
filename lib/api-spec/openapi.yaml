@@ -295,6 +295,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /me/behavior-insight:
+    post:
+      tags: [store]
+      operationId: postBehaviorInsight
+      summary: Generate contextual pantry insight cards (AI + statistics)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BehaviorInsightRequest'
+      responses:
+        '200':
+          description: Insight cards and updated behavior metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BehaviorInsightResponse'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          description: AI not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /me/profile:
     patch:
       tags: [store]
@@ -596,6 +629,59 @@ components:
       properties:
         error:
           type: string
+    BehaviorInsightRequest:
+      type: object
+      properties:
+        latestScanItemNames:
+          type: array
+          items:
+            type: string
+        force:
+          type: boolean
+          default: false
+    BehaviorInsightResponse:
+      type: object
+      required: [behaviorMeta]
+      properties:
+        behaviorMeta:
+          $ref: '#/components/schemas/BehaviorMeta'
+    BehaviorCard:
+      type: object
+      required: [id, type, title, message, confidence]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [forgot_staple, confirm_exhaustion, soft_reminder, diet_shift]
+        title:
+          type: string
+        message:
+          type: string
+        family:
+          type: string
+        itemName:
+          type: string
+        pantryItemId:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+    BehaviorMeta:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/BehaviorCard'
+        mutedFamilies:
+          type: array
+          items:
+            type: string
     UserStore:
       type: object
       required: [pantry, scans, shoppingList]
@@ -615,3 +701,5 @@ components:
           items:
             type: object
             additionalProperties: true
+        behaviorMeta:
+          $ref: '#/components/schemas/BehaviorMeta'

@@ -16,12 +16,15 @@ import {
   getInsightContribution,
 } from "@/lib/itemInsights";
 import {
+  daysBetween,
   getDaysUntilNeeded,
+  getEffectiveCycleDays,
   getItemStatus,
   getStatusLabel,
   summarizeCadence,
 } from "@/lib/predictions";
-import type { ItemStatus, PantryItem } from "@/lib/types";
+import { isBulkStableItem } from "@/lib/shelfLifeDefaults";
+import type { BulkStockLevel, ItemStatus, PantryItem } from "@/lib/types";
 
 interface Props {
   item: PantryItem | null;
@@ -30,6 +33,8 @@ interface Props {
   onMarkWasted: (id: string) => void | Promise<void>;
   onMarkInStock: (id: string) => void;
   onDelete: (id: string) => void;
+  onSetStockLevel?: (id: string, level: BulkStockLevel) => void | Promise<void>;
+  predictionCtx?: import("@/lib/predictions").PredictionContext;
 }
 
 function formatTimeline(item: PantryItem, days: number): string {
@@ -65,11 +70,21 @@ export function ItemDetailSheet({
   onMarkWasted,
   onMarkInStock,
   onDelete,
+  onSetStockLevel,
+  predictionCtx = {},
 }: Props) {
   if (!item) return null;
 
-  const status = getItemStatus(item);
-  const days = getDaysUntilNeeded(item);
+  const status = getItemStatus(item, predictionCtx);
+  const days = getDaysUntilNeeded(item, predictionCtx);
+  const isBulk = isBulkStableItem(item.name);
+  const cycleDays = getEffectiveCycleDays(item, predictionCtx);
+  const daysSinceScan = daysBetween(item.lastPurchasedAt, new Date());
+  const bulkPct = Math.min(
+    100,
+    Math.round((daysSinceScan / Math.max(cycleDays, 1)) * 100),
+  );
+  const stockLevel = item.stockLevel ?? "full";
   const borderColor = statusBorderColor(status);
   const nutrition = getNutritionEstimate(item);
   const insightNote = getInsightContribution(item);
@@ -121,6 +136,52 @@ export function ItemDetailSheet({
                 wide
               />
             </View>
+
+            {isBulk && onSetStockLevel && (
+              <View style={s.card}>
+                <Text style={s.cardTitle}>BULK STOCK</Text>
+                <Text style={s.bulkSub}>
+                  Time since last scan ({daysSinceScan}d of ~{cycleDays}d cycle)
+                </Text>
+                <View style={s.bulkTrack}>
+                  <View
+                    style={[
+                      s.bulkFill,
+                      {
+                        width: `${100 - bulkPct}%`,
+                        backgroundColor:
+                          bulkPct > 80 ? D.amber : D.greenMid,
+                      },
+                    ]}
+                  />
+                </View>
+                <View style={s.bulkRow}>
+                  {(["full", "low", "empty"] as const).map((level) => (
+                    <Pressable
+                      key={level}
+                      style={[
+                        s.bulkBtn,
+                        stockLevel === level && s.bulkBtnActive,
+                      ]}
+                      onPress={() => onSetStockLevel(item.id, level)}
+                    >
+                      <Text
+                        style={[
+                          s.bulkBtnTxt,
+                          stockLevel === level && s.bulkBtnTxtActive,
+                        ]}
+                      >
+                        {level === "full"
+                          ? "Full"
+                          : level === "low"
+                            ? "Low"
+                            : "Finished"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
 
             {/* ── Nutrition estimate ── */}
             {!isNonFood && (
@@ -329,6 +390,48 @@ const s = StyleSheet.create({
     letterSpacing: 1.4,
     color: D.greenMid,
     textTransform: "uppercase",
+  },
+  bulkSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.inkLight,
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  bulkTrack: {
+    height: 8,
+    backgroundColor: D.creamBorder,
+    borderRadius: 4,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  bulkFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  bulkRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  bulkBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  bulkBtnActive: {
+    backgroundColor: D.greenMid,
+    borderColor: D.greenMid,
+  },
+  bulkBtnTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: D.greenMid,
+  },
+  bulkBtnTxtActive: {
+    color: D.cream,
   },
   nutGrid: {
     gap: 6,

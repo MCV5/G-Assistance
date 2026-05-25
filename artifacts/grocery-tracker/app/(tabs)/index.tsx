@@ -17,9 +17,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { boldTheme as D } from "@/constants/colors";
 import { usePantry } from "@/contexts/PantryContext";
 import { useAuth } from "@/lib/auth";
+import {
+  computePantryHealthPct,
+  confirmationPrompt,
+  getConfirmationCandidates,
+} from "@/lib/confirmationQueue";
 import { buildRunningLowSignals } from "@/lib/itemInsights";
-import { getItemStatus } from "@/lib/predictions";
-import type { PantryItem } from "@/lib/types";
+import {
+  getDaysSinceLastScan,
+  isPantryStale,
+  STALE_SCAN_DAYS,
+} from "@/lib/pantryStaleness";
+import { getItemStatus, urgencyLabel } from "@/lib/predictions";
+import type { BehaviorCard, PantryItem } from "@/lib/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -48,21 +58,6 @@ function lastScanLabel(date: Date): string {
   return `${d}d ago`;
 }
 
-function getDaysUntilNeeded(item: PantryItem): number {
-  const status = getItemStatus(item);
-  if (status === "overdue" || status === "expired") return 0;
-  if (status === "due") return 1;
-  if (status === "running-low") return Math.min(5, item.estimatedShelfLifeDays ?? 5);
-  return 99;
-}
-
-function urgencyLabel(item: PantryItem): { text: string; urgent: boolean } {
-  const days = getDaysUntilNeeded(item);
-  if (days <= 0) return { text: "BUY TODAY", urgent: true };
-  if (days === 1) return { text: "TOMORROW",  urgent: true };
-  return { text: `IN ${days} DAYS`, urgent: false };
-}
-
 function getInitials(firstName?: string | null, email?: string | null): string {
   if (firstName) return firstName.slice(0, 2).toUpperCase();
   if (email)     return email.slice(0, 2).toUpperCase();
@@ -74,7 +69,16 @@ function getInitials(firstName?: string | null, email?: string | null): string {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { pantry, scans } = usePantry();
+  const {
+    pantry,
+    scans,
+    behaviorMeta,
+    predictionCtx,
+    confirmStillHave,
+    confirmOut,
+    addManualShoppingItem,
+    dismissBehaviorCard,
+  } = usePantry();
 
   const [statModal, setStatModal] = useState<"items" | "categories" | "fresh" | "lastScan" | null>(null);
 
@@ -86,14 +90,36 @@ export default function HomeScreen() {
     recentItems,
     totalItems,
     categoryCount,
+    confirmationItems,
+    insightCards,
+    stale,
+    daysSinceScan,
   } = useMemo(() => {
     const active = pantry.filter((p) => !p.consumed);
+    const stale = isPantryStale(scans);
+    const daysSinceScan = getDaysSinceLastScan(scans);
 
-    const lowSignals = buildRunningLowSignals(active, 4);
+    const confirmationItems = stale
+      ? []
+      : getConfirmationCandidates(active, 6, predictionCtx);
+    const confirmIds = new Set(confirmationItems.map((c) => c.item.id));
+    const insightCards = stale
+      ? []
+      : (behaviorMeta.cards ?? []).filter(
+          (c) => !c.pantryItemId || !confirmIds.has(c.pantryItemId),
+        ).slice(0, 3);
 
-    const freshCount = active.filter((p) => getItemStatus(p) === "fresh").length;
+    const lowSignals = stale
+      ? []
+      : confirmationItems.length > 0 || insightCards.length > 0
+        ? []
+        : buildRunningLowSignals(active, 4, predictionCtx);
+
+    const freshCount = active.filter(
+      (p) => getItemStatus(p, predictionCtx) === "fresh",
+    ).length;
     const totalItems = active.length;
-    const healthPct  = totalItems === 0 ? 0 : Math.round((freshCount / totalItems) * 100);
+    const healthPct = stale ? 0 : computePantryHealthPct(active, predictionCtx);
 
     // Category breakdown — top 5 by count
     const catMap: Record<string, number> = {};
@@ -120,8 +146,12 @@ export default function HomeScreen() {
       recentItems,
       totalItems,
       categoryCount,
+      confirmationItems,
+      insightCards,
+      stale,
+      daysSinceScan,
     };
-  }, [pantry]);
+  }, [pantry, scans, behaviorMeta.cards, predictionCtx]);
 
   const lastScan = scans[0];
 
@@ -155,11 +185,19 @@ export default function HomeScreen() {
 
         {/* Pantry health bar */}
         <View style={s.healthRow}>
-          <Text style={s.healthLabel}>PANTRY HEALTH</Text>
+          <Text style={s.healthLabel}>
+            {stale ? "TRACKING PAUSED" : "PANTRY HEALTH"}
+          </Text>
           <View style={s.healthTrack}>
-            <View style={[s.healthFill, { width: `${healthPct}%` }]} />
+            <View
+              style={[
+                s.healthFill,
+                { width: stale ? "0%" : `${healthPct}%` },
+                stale && { backgroundColor: D.cream },
+              ]}
+            />
           </View>
-          <Text style={s.healthPct}>{healthPct}%</Text>
+          <Text style={s.healthPct}>{stale ? "—" : `${healthPct}%`}</Text>
         </View>
       </View>
 
@@ -183,13 +221,119 @@ export default function HomeScreen() {
         contentContainerStyle={{ paddingBottom: botPad }}
       >
         <View style={s.body}>
-          {/* ── Running Low ── */}
+          {stale && (
+            <View style={s.staleBanner}>
+              <Text style={s.staleTitle}>It&apos;s been a while!</Text>
+              <Text style={s.staleSub}>
+                {daysSinceScan != null
+                  ? `Last scan was ${daysSinceScan} days ago. We paused alerts so nothing feels urgent from old data.`
+                  : `No scan in ${STALE_SCAN_DAYS}+ days. Update when you can.`}
+              </Text>
+              <View style={s.staleActions}>
+                <Pressable
+                  style={({ pressed }) => [
+                    s.staleBtnPrimary,
+                    { opacity: pressed ? 0.9 : 1 },
+                  ]}
+                  onPress={() => router.push("/(tabs)/scan")}
+                >
+                  <Text style={s.staleBtnPrimaryTxt}>Scan latest receipt</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    s.staleBtnGhost,
+                    { opacity: pressed ? 0.9 : 1 },
+                  ]}
+                  onPress={() => router.push("/(tabs)/pantry")}
+                >
+                  <Text style={s.staleBtnGhostTxt}>Quick update</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+
+          {insightCards.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHead}>
+                <View style={s.sectionHeadLeft}>
+                  <Feather name="zap" size={11} color={D.greenMid} />
+                  <Text style={s.sectionTitle}>SMART SUGGESTIONS</Text>
+                </View>
+              </View>
+              <View style={{ gap: 8 }}>
+                {insightCards.map((card) => (
+                  <InsightCard
+                    key={card.id}
+                    card={card}
+                    onDismiss={() => dismissBehaviorCard(card.id)}
+                    onStillHave={
+                      card.pantryItemId
+                        ? () => {
+                            confirmStillHave(card.pantryItemId!);
+                            dismissBehaviorCard(card.id);
+                          }
+                        : undefined
+                    }
+                    onOut={
+                      card.pantryItemId
+                        ? () => {
+                            confirmOut(card.pantryItemId!);
+                            dismissBehaviorCard(card.id);
+                          }
+                        : undefined
+                    }
+                    onAddShop={
+                      card.itemName
+                        ? () => {
+                            const item = pantry.find(
+                              (p) => p.id === card.pantryItemId,
+                            );
+                            addManualShoppingItem(
+                              card.itemName!,
+                              item?.category ?? "Pantry",
+                            );
+                            dismissBehaviorCard(card.id);
+                          }
+                        : undefined
+                    }
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {confirmationItems.length > 0 && (
+            <View style={s.section}>
+              <View style={s.sectionHead}>
+                <View style={s.sectionHeadLeft}>
+                  <Feather name="help-circle" size={11} color={D.greenMid} />
+                  <Text style={s.sectionTitle}>QUICK CHECK</Text>
+                </View>
+              </View>
+              <Text style={s.confirmIntro}>
+                Based on your usual routine, you might be out of these. Tap to confirm:
+              </Text>
+              <View style={{ gap: 8 }}>
+                {confirmationItems.map(({ item }) => (
+                  <ConfirmationCard
+                    key={item.id}
+                    item={item}
+                    onStillHave={() => confirmStillHave(item.id)}
+                    onOut={() => confirmOut(item.id)}
+                    ctx={predictionCtx}
+                  />
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* ── Running Low (soft reminders only) ── */}
           {lowSignals.length > 0 && (
             <View style={s.section}>
               <View style={s.sectionHead}>
                 <View style={s.sectionHeadLeft}>
-                  <Feather name="alert-triangle" size={11} color={D.amber} />
-                  <Text style={s.sectionTitle}>RUNNING LOW</Text>
+                  <Feather name="clock" size={11} color={D.greenMid} />
+                  <Text style={s.sectionTitle}>COMING UP</Text>
                 </View>
                 <Pressable onPress={() => router.push("/(tabs)/pantry")}>
                   <Text style={s.seeAll}>See all</Text>
@@ -507,53 +651,146 @@ function StatBox({
   return <View style={[s.statBox, accent && s.statBoxAccent]}>{inner}</View>;
 }
 
+function InsightCard({
+  card,
+  onDismiss,
+  onStillHave,
+  onOut,
+  onAddShop,
+}: {
+  card: BehaviorCard;
+  onDismiss: () => void;
+  onStillHave?: () => void;
+  onOut?: () => void;
+  onAddShop?: () => void;
+}) {
+  return (
+    <View style={s.insightCard}>
+      <Text style={s.insightTitle}>{card.title}</Text>
+      <Text style={s.insightMsg}>{card.message}</Text>
+      <View style={s.confirmRow}>
+        {onAddShop ? (
+          <Pressable
+            style={({ pressed }) => [
+              s.confirmBtnOut,
+              { opacity: pressed ? 0.88 : 1 },
+            ]}
+            onPress={onAddShop}
+          >
+            <Text style={s.confirmBtnOutTxt}>Add to list</Text>
+          </Pressable>
+        ) : null}
+        {onOut ? (
+          <Pressable
+            style={({ pressed }) => [
+              s.confirmBtnOut,
+              { opacity: pressed ? 0.88 : 1 },
+            ]}
+            onPress={onOut}
+          >
+            <Text style={s.confirmBtnOutTxt}>Yes, out</Text>
+          </Pressable>
+        ) : null}
+        {onStillHave ? (
+          <Pressable
+            style={({ pressed }) => [
+              s.confirmBtnHave,
+              { opacity: pressed ? 0.88 : 1 },
+            ]}
+            onPress={onStillHave}
+          >
+            <Text style={s.confirmBtnHaveTxt}>Still have</Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          style={({ pressed }) => [
+            s.confirmBtnHave,
+            { opacity: pressed ? 0.88 : 1, flex: 0.6 },
+          ]}
+          onPress={onDismiss}
+        >
+          <Text style={s.confirmBtnHaveTxt}>Dismiss</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function ConfirmationCard({
+  item,
+  onStillHave,
+  onOut,
+  ctx,
+}: {
+  item: PantryItem;
+  onStillHave: () => void;
+  onOut: () => void;
+  ctx: import("@/lib/predictions").PredictionContext;
+}) {
+  return (
+    <View style={s.confirmCard}>
+      <Text style={s.confirmName} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <Text style={s.confirmHint}>{confirmationPrompt(item, ctx)}</Text>
+      <View style={s.confirmRow}>
+        <Pressable
+          style={({ pressed }) => [
+            s.confirmBtnOut,
+            { opacity: pressed ? 0.88 : 1 },
+          ]}
+          onPress={onOut}
+        >
+          <Text style={s.confirmBtnOutTxt}>Yes, out</Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            s.confirmBtnHave,
+            { opacity: pressed ? 0.88 : 1 },
+          ]}
+          onPress={onStillHave}
+        >
+          <Text style={s.confirmBtnHaveTxt}>Still have some</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function SingleLowCard({ signal }: { signal: import("@/lib/itemInsights").LowItem; }) {
-  const { text, urgent } = urgencyLabel(signal.item);
+  const { text } = urgencyLabel(signal.item);
   return (
     <Pressable
       style={s.lowCard}
       onPress={() => router.push("/(tabs)/pantry")}
     >
-      <View style={[s.lowDot, urgent && s.lowDotUrgent]} />
+      <View style={s.lowDot} />
       <Text style={s.lowName} numberOfLines={1}>{signal.item.name}</Text>
-      <Text style={[s.lowDays, urgent && s.lowDaysUrgent]}>{text}</Text>
-      {urgent && (
-        <View style={s.urgentBadge}>
-          <Text style={s.urgentBadgeTxt}>URGENT</Text>
-        </View>
-      )}
+      <Text style={s.lowDays}>{text}</Text>
     </Pressable>
   );
 }
 
 function GroupLowCard({ signal }: { signal: import("@/lib/itemInsights").LowGroup }) {
-  const urgent = signal.soonestDays <= 1;
   const daysLabel =
     signal.soonestDays <= 0
-      ? "BUY TODAY"
+      ? "check soon"
       : signal.soonestDays === 1
-      ? "TOMORROW"
-      : `IN ${signal.soonestDays}D`;
+        ? "~1d"
+        : `~${signal.soonestDays}d`;
   return (
     <Pressable
       style={[s.lowCard, s.lowCardGroup]}
       onPress={() => router.push("/(tabs)/pantry")}
     >
-      <Feather name="layers" size={13} color={urgent ? D.amber : D.greenLight} />
+      <Feather name="layers" size={13} color={D.greenLight} />
       <View style={{ flex: 1 }}>
         <Text style={s.lowName} numberOfLines={1}>
           {signal.label}
           <Text style={[s.lowCount, { color: D.inkLight }]}> · {signal.count} items</Text>
         </Text>
-        <Text style={[s.lowGroupSub, urgent && { color: D.amber }]}>
-          Soonest: {daysLabel.toLowerCase()}
-        </Text>
+        <Text style={s.lowGroupSub}>Soonest: {daysLabel}</Text>
       </View>
-      {urgent && (
-        <View style={s.urgentBadge}>
-          <Text style={s.urgentBadgeTxt}>URGENT</Text>
-        </View>
-      )}
     </Pressable>
   );
 }
@@ -713,6 +950,133 @@ const s = StyleSheet.create({
   body: {
     paddingHorizontal: 16,
     paddingTop: 16,
+  },
+
+  staleBanner: {
+    backgroundColor: D.cream,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  staleTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 16,
+    color: D.inkBlack,
+    marginBottom: 6,
+  },
+  staleSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: D.inkLight,
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  staleActions: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  staleBtnPrimary: {
+    backgroundColor: D.greenMid,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  staleBtnPrimaryTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.cream,
+  },
+  staleBtnGhost: {
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  staleBtnGhostTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.greenMid,
+  },
+
+  confirmIntro: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: D.inkLight,
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  confirmCard: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 12,
+    padding: 14,
+  },
+  confirmName: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 15,
+    color: D.inkBlack,
+    marginBottom: 4,
+  },
+  confirmHint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.inkLight,
+    marginBottom: 12,
+  },
+  confirmRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  confirmBtnOut: {
+    flex: 1,
+    backgroundColor: D.greenMid,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  confirmBtnOutTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.cream,
+  },
+  confirmBtnHave: {
+    flex: 1.2,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  confirmBtnHaveTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.greenMid,
+  },
+
+  insightCard: {
+    backgroundColor: "#F8FBF3",
+    borderWidth: 1,
+    borderColor: D.greenLight,
+    borderRadius: 12,
+    padding: 14,
+  },
+  insightTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: D.greenMid,
+    marginBottom: 4,
+  },
+  insightMsg: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: D.inkBlack,
+    lineHeight: 18,
+    marginBottom: 12,
   },
 
   // Scan CTA — pinned between header and scroll

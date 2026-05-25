@@ -11,13 +11,23 @@ import type { ExtractedItem } from "@workspace/api-client-react";
 
 import { useAuth } from "@/lib/auth";
 import { REQUIRE_EMAIL_VERIFICATION } from "@/lib/features";
+import { appendConsumptionRecord } from "@/lib/consumptionHistory";
+import {
+  fetchBehaviorInsight,
+  shouldRefreshBehaviorInsight,
+} from "@/lib/behaviorInsights";
+import { makePredictionContext } from "@/lib/predictionContext";
 import {
   computeAverageDaysBetweenPurchases,
   isPredictedNeeded,
+  type PredictionContext,
 } from "@/lib/predictions";
 import { coerceCategory } from "@/lib/guessCategory";
+import { resolveShelfLifeDays } from "@/lib/shelfLifeDefaults";
 import { loadStore, newId, saveStore, type StoreSnapshot } from "@/lib/storage";
 import type {
+  BehaviorMeta,
+  BulkStockLevel,
   Category,
   PantryItem,
   ScanRecord,
@@ -29,7 +39,14 @@ interface PantryContextValue {
   pantry: PantryItem[];
   scans: ScanRecord[];
   shoppingList: ShoppingListItem[];
+  behaviorMeta: BehaviorMeta;
+  predictionCtx: PredictionContext;
   loading: boolean;
+  refreshBehaviorInsights: (
+    latestScanItemNames?: string[],
+    force?: boolean,
+  ) => Promise<void>;
+  dismissBehaviorCard: (cardId: string) => void;
   addScannedItems: (
     items: ExtractedItem[],
     sourceType: ScanSource,
@@ -39,6 +56,9 @@ interface PantryContextValue {
   markConsumed: (id: string) => Promise<void>;
   markWasted: (id: string) => Promise<void>;
   unmarkConsumed: (id: string) => Promise<void>;
+  confirmStillHave: (id: string) => Promise<void>;
+  confirmOut: (id: string) => Promise<void>;
+  setStockLevel: (id: string, level: BulkStockLevel) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
   refreshPredictions: () => Promise<void>;
   addManualPantryItem: (name: string, category: Category) => Promise<void>;
@@ -58,6 +78,7 @@ function shoppingDedupeKey(name: string, category: Category): string {
 function rebuildPredictedShoppingList(
   pantry: PantryItem[],
   existing: ShoppingListItem[],
+  ctx: PredictionContext = {},
 ): ShoppingListItem[] {
   const manual = existing.filter((s) => s.reason === "manual");
   const manualKeys = new Set(
@@ -72,7 +93,7 @@ function rebuildPredictedShoppingList(
   );
 
   const predicted: ShoppingListItem[] = pantry
-    .filter((p) => isPredictedNeeded(p))
+    .filter((p) => isPredictedNeeded(p, ctx))
     .filter((p) => !manualKeys.has(shoppingDedupeKey(p.name, p.category)))
     .map((p) => {
       const key = p.id;
@@ -105,16 +126,28 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
   const [pantry, setPantry] = useState<PantryItem[]>([]);
   const [scans, setScans] = useState<ScanRecord[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
+  const [behaviorMeta, setBehaviorMeta] = useState<BehaviorMeta>({
+    cards: [],
+    mutedFamilies: [],
+  });
   const [loading, setLoading] = useState(true);
+
+  const predictionCtx = useMemo(
+    () => makePredictionContext(pantry, behaviorMeta.mutedFamilies),
+    [pantry, behaviorMeta.mutedFamilies],
+  );
 
   const stateRef = useRef<StoreSnapshot>({
     pantry: [],
     scans: [],
     shoppingList: [],
+    behaviorMeta: { cards: [], mutedFamilies: [] },
   });
-  stateRef.current = { pantry, scans, shoppingList };
-
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    stateRef.current = { pantry, scans, shoppingList, behaviorMeta };
+  }, [pantry, scans, shoppingList, behaviorMeta]);
   const canSaveRef = useRef(false);
 
   const queueSave = useCallback(() => {
@@ -136,6 +169,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       setPantry([]);
       setScans([]);
       setShoppingList([]);
+      setBehaviorMeta({ cards: [], mutedFamilies: [] });
       setLoading(false);
       return;
     }
@@ -144,6 +178,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       setPantry([]);
       setScans([]);
       setShoppingList([]);
+      setBehaviorMeta({ cards: [], mutedFamilies: [] });
       setLoading(false);
       return;
     }
@@ -154,12 +189,18 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       try {
         const data = await loadStore();
         if (!active) return;
+        const ctx = makePredictionContext(
+          data.pantry,
+          data.behaviorMeta.mutedFamilies,
+        );
         const refreshed = rebuildPredictedShoppingList(
           data.pantry,
           data.shoppingList,
+          ctx,
         );
         setPantry(data.pantry);
         setScans(data.scans);
+        setBehaviorMeta(data.behaviorMeta);
         setShoppingList(refreshed);
         canSaveRef.current = true;
         if (
@@ -182,10 +223,48 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
   const persistPantry = useCallback(
     async (next: PantryItem[]) => {
       setPantry(next);
-      setShoppingList((cur) => rebuildPredictedShoppingList(next, cur));
+      setShoppingList((cur) =>
+        rebuildPredictedShoppingList(next, cur, predictionCtx),
+      );
+      queueSave();
+    },
+    [queueSave, predictionCtx],
+  );
+
+  const persistBehaviorMeta = useCallback(
+    (next: BehaviorMeta) => {
+      setBehaviorMeta(next);
       queueSave();
     },
     [queueSave],
+  );
+
+  const dismissBehaviorCard = useCallback(
+    (cardId: string) => {
+      setBehaviorMeta((cur) => ({
+        ...cur,
+        cards: cur.cards.filter((c) => c.id !== cardId),
+      }));
+      queueSave();
+    },
+    [queueSave],
+  );
+
+  const refreshBehaviorInsights = useCallback(
+    async (latestScanItemNames?: string[], force = false) => {
+      if (!canSaveRef.current) return;
+      if (!shouldRefreshBehaviorInsight(behaviorMeta, force)) return;
+      try {
+        const meta = await fetchBehaviorInsight({
+          latestScanItemNames,
+          force,
+        });
+        persistBehaviorMeta(meta);
+      } catch (err) {
+        console.warn("Behavior insight failed:", err);
+      }
+    },
+    [behaviorMeta, persistBehaviorMeta],
   );
 
   const persistShopping = useCallback(
@@ -219,22 +298,32 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             source: sourceType,
           };
           const purchases = [...existing.purchases, purchase];
+          const shelfLife = resolveShelfLifeDays(
+            cat,
+            incoming.name,
+            incoming.estimatedShelfLifeDays || existing.estimatedShelfLifeDays,
+          );
+          const consumptionHistory = !existing.consumed
+            ? appendConsumptionRecord(existing, purchaseDateIso, "replaced")
+            : (existing.consumptionHistory ?? []);
           next[existingIdx] = {
             ...existing,
-            quantity: existing.quantity + incoming.quantity,
+            quantity: incoming.quantity,
             unit: incoming.unit || existing.unit,
             category: cat,
             isOrganic: incoming.isOrganic ?? existing.isOrganic,
             organicConfidence:
               incoming.organicConfidence ?? existing.organicConfidence,
             organicSource: incoming.organicSource ?? existing.organicSource,
-            estimatedShelfLifeDays:
-              incoming.estimatedShelfLifeDays || existing.estimatedShelfLifeDays,
+            estimatedShelfLifeDays: shelfLife,
             lastPurchasedAt: purchaseDateIso,
+            lastConfirmedAt: purchaseDateIso,
             purchases,
             averageDaysBetweenPurchases:
               computeAverageDaysBetweenPurchases(purchases),
             consumed: false,
+            consumptionHistory,
+            stockLevel: undefined,
           };
         } else {
           const purchase = {
@@ -252,9 +341,14 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             organicSource: incoming.organicSource,
             quantity: incoming.quantity,
             unit: incoming.unit,
-            estimatedShelfLifeDays: incoming.estimatedShelfLifeDays,
+            estimatedShelfLifeDays: resolveShelfLifeDays(
+              cat,
+              incoming.name,
+              incoming.estimatedShelfLifeDays,
+            ),
             firstSeenAt: now,
             lastPurchasedAt: purchaseDateIso,
+            lastConfirmedAt: purchaseDateIso,
             purchases: [purchase],
             averageDaysBetweenPurchases: null,
             consumed: false,
@@ -271,24 +365,88 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       };
       const nextScans = [scan, ...scans].slice(0, 100);
 
+      const ctx = makePredictionContext(next, behaviorMeta.mutedFamilies);
       setPantry(next);
       setScans(nextScans);
-      setShoppingList((cur) => rebuildPredictedShoppingList(next, cur));
+      setShoppingList((cur) => rebuildPredictedShoppingList(next, cur, ctx));
       queueSave();
+
+      const scanNames = items.map((i) => i.name);
+      void refreshBehaviorInsights(scanNames, true);
 
       return scan;
     },
-    [pantry, scans, queueSave],
+    [pantry, scans, queueSave, behaviorMeta.mutedFamilies, refreshBehaviorInsights],
   );
 
   const markConsumed = useCallback(
     async (id: string) => {
+      const now = new Date().toISOString();
+      const next = pantry.map((p) => {
+        if (p.id !== id) return p;
+        return {
+          ...p,
+          consumed: true,
+          consumptionHistory: appendConsumptionRecord(p, now, "confirmed_out"),
+        };
+      });
+      await persistPantry(next);
+    },
+    [pantry, persistPantry],
+  );
+
+  const confirmStillHave = useCallback(
+    async (id: string) => {
+      const now = new Date().toISOString();
       const next = pantry.map((p) =>
-        p.id === id ? { ...p, consumed: true } : p,
+        p.id === id
+          ? {
+              ...p,
+              consumed: false,
+              lastPurchasedAt: now,
+              lastConfirmedAt: now,
+              stockLevel: p.stockLevel === "empty" ? ("low" as const) : p.stockLevel,
+            }
+          : p,
       );
       await persistPantry(next);
     },
     [pantry, persistPantry],
+  );
+
+  const confirmOut = useCallback(
+    async (id: string) => {
+      const item = pantry.find((p) => p.id === id);
+      if (!item) return;
+      const now = new Date().toISOString();
+      const next = pantry.map((p) => {
+        if (p.id !== id) return p;
+        return {
+          ...p,
+          consumed: true,
+          stockLevel: "empty" as const,
+          consumptionHistory: appendConsumptionRecord(p, now, "confirmed_out"),
+        };
+      });
+      setPantry(next);
+      const shopEntry: ShoppingListItem = {
+        id: newId(),
+        name: item.name,
+        category: item.category,
+        reason: "manual",
+        pantryItemId: item.id,
+        checked: false,
+        createdAt: now,
+      };
+      const merged = rebuildPredictedShoppingList(
+        next,
+        [...shoppingList, shopEntry],
+        predictionCtx,
+      );
+      setShoppingList(merged);
+      queueSave();
+    },
+    [pantry, shoppingList, queueSave, predictionCtx],
   );
 
   const markWasted = useCallback(
@@ -313,6 +471,35 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     [pantry, persistPantry],
   );
 
+  const setStockLevel = useCallback(
+    async (id: string, level: BulkStockLevel) => {
+      const now = new Date().toISOString();
+      const next = pantry.map((p) => {
+        if (p.id !== id) return p;
+        if (level === "full") {
+          return {
+            ...p,
+            stockLevel: "full" as const,
+            consumed: false,
+            lastPurchasedAt: now,
+            lastConfirmedAt: now,
+          };
+        }
+        if (level === "low") {
+          return { ...p, stockLevel: "low" as const, consumed: false };
+        }
+        return {
+          ...p,
+          stockLevel: "empty" as const,
+          consumed: true,
+          consumptionHistory: appendConsumptionRecord(p, now, "confirmed_out"),
+        };
+      });
+      await persistPantry(next);
+    },
+    [pantry, persistPantry],
+  );
+
   const removeItem = useCallback(
     async (id: string) => {
       const next = pantry.filter((p) => p.id !== id);
@@ -322,9 +509,13 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
   );
 
   const refreshPredictions = useCallback(async () => {
-    const refreshed = rebuildPredictedShoppingList(pantry, shoppingList);
+    const refreshed = rebuildPredictedShoppingList(
+      pantry,
+      shoppingList,
+      predictionCtx,
+    );
     await persistShopping(refreshed);
-  }, [pantry, persistShopping, shoppingList]);
+  }, [pantry, persistShopping, shoppingList, predictionCtx]);
 
   const addManualPantryItem = useCallback(
     async (name: string, category: Category) => {
@@ -379,10 +570,10 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
       };
       await persistShopping(
-        rebuildPredictedShoppingList(pantry, [...shoppingList, item]),
+        rebuildPredictedShoppingList(pantry, [...shoppingList, item], predictionCtx),
       );
     },
-    [pantry, persistShopping, shoppingList],
+    [pantry, persistShopping, shoppingList, predictionCtx],
   );
 
   const toggleShoppingItem = useCallback(
@@ -398,33 +589,51 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
   const removeShoppingItem = useCallback(
     async (id: string) => {
       const filtered = shoppingList.filter((s) => s.id !== id);
-      await persistShopping(rebuildPredictedShoppingList(pantry, filtered));
+      await persistShopping(
+        rebuildPredictedShoppingList(pantry, filtered, predictionCtx),
+      );
     },
-    [pantry, persistShopping, shoppingList],
+    [pantry, persistShopping, shoppingList, predictionCtx],
   );
 
   const clearCheckedShoppingItems = useCallback(async () => {
     const filtered = shoppingList.filter((s) => !s.checked);
-    await persistShopping(rebuildPredictedShoppingList(pantry, filtered));
-  }, [pantry, persistShopping, shoppingList]);
+    await persistShopping(
+      rebuildPredictedShoppingList(pantry, filtered, predictionCtx),
+    );
+  }, [pantry, persistShopping, shoppingList, predictionCtx]);
 
   const resetAll = useCallback(async () => {
     setPantry([]);
     setScans([]);
     setShoppingList([]);
+    setBehaviorMeta({ cards: [], mutedFamilies: [] });
     queueSave();
   }, [queueSave]);
+
+  useEffect(() => {
+    if (!canSaveRef.current || loading || !isAuthenticated) return;
+    if (pantry.length === 0) return;
+    void refreshBehaviorInsights(undefined, false);
+  }, [isAuthenticated, loading, pantry.length, refreshBehaviorInsights]);
 
   const value = useMemo<PantryContextValue>(
     () => ({
       pantry,
       scans,
       shoppingList,
+      behaviorMeta,
+      predictionCtx,
       loading,
+      refreshBehaviorInsights,
+      dismissBehaviorCard,
       addScannedItems,
       markConsumed,
       markWasted,
       unmarkConsumed,
+      confirmStillHave,
+      confirmOut,
+      setStockLevel,
       removeItem,
       refreshPredictions,
       addManualPantryItem,
@@ -438,11 +647,18 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       pantry,
       scans,
       shoppingList,
+      behaviorMeta,
+      predictionCtx,
       loading,
+      refreshBehaviorInsights,
+      dismissBehaviorCard,
       addScannedItems,
       markConsumed,
       markWasted,
       unmarkConsumed,
+      confirmStillHave,
+      confirmOut,
+      setStockLevel,
       removeItem,
       refreshPredictions,
       addManualPantryItem,

@@ -1,5 +1,9 @@
 import type { Category, PantryItem } from "./types";
-import { getDaysUntilNeeded, getItemStatus } from "./predictions";
+import {
+  getDaysUntilNeeded,
+  getItemStatus,
+  type PredictionContext,
+} from "./predictions";
 
 // ─── Family inference ─────────────────────────────────────────────────────────
 
@@ -59,10 +63,11 @@ export type LowSignal = LowItem | LowGroup;
 export function buildRunningLowSignals(
   active: PantryItem[],
   maxRows = 4,
+  ctx: PredictionContext = {},
 ): LowSignal[] {
   const lowItems = active.filter((p) => {
-    const s = getItemStatus(p);
-    return s !== "fresh";
+    const s = getItemStatus(p, ctx);
+    return s === "running-low" || s === "due";
   });
 
   // Group by family
@@ -84,8 +89,8 @@ export function buildRunningLowSignals(
 
   // Singles
   for (const item of singles) {
-    const status = getItemStatus(item);
-    const days = getDaysUntilNeeded(item);
+    const status = getItemStatus(item, ctx);
+    const days = getDaysUntilNeeded(item, ctx);
     const baseScore = STATUS_WEIGHT[status] ?? 0;
     const daysPenalty = Math.max(0, 10 - days);
     signals.push({ kind: "single", item, score: baseScore + daysPenalty });
@@ -95,15 +100,15 @@ export function buildRunningLowSignals(
   for (const [label, members] of families) {
     if (members.length === 1) {
       const item = members[0];
-      const status = getItemStatus(item);
-      const days = getDaysUntilNeeded(item);
+      const status = getItemStatus(item, ctx);
+      const days = getDaysUntilNeeded(item, ctx);
       const baseScore = STATUS_WEIGHT[status] ?? 0;
       signals.push({ kind: "single", item, score: baseScore + Math.max(0, 10 - days) });
       continue;
     }
-    const soonestDays = Math.min(...members.map((m) => getDaysUntilNeeded(m)));
+    const soonestDays = Math.min(...members.map((m) => getDaysUntilNeeded(m, ctx)));
     const topStatus = members
-      .map((m) => getItemStatus(m))
+      .map((m) => getItemStatus(m, ctx))
       .sort((a, b) => (STATUS_WEIGHT[b] ?? 0) - (STATUS_WEIGHT[a] ?? 0))[0];
     const baseScore = STATUS_WEIGHT[topStatus] ?? 0;
     const countBonus = Math.min(members.length * 3, 15);

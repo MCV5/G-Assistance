@@ -16,7 +16,23 @@ const EMPTY_STORE = {
   pantry: [],
   scans: [],
   shoppingList: [],
+  behaviorMeta: { cards: [], mutedFamilies: [] },
 };
+
+function normalizeBehaviorMeta(raw: unknown) {
+  if (!raw || typeof raw !== "object") {
+    return { cards: [], mutedFamilies: [] as string[] };
+  }
+  const o = raw as Record<string, unknown>;
+  return {
+    generatedAt:
+      typeof o.generatedAt === "string" ? o.generatedAt : undefined,
+    cards: Array.isArray(o.cards) ? o.cards : [],
+    mutedFamilies: Array.isArray(o.mutedFamilies)
+      ? (o.mutedFamilies as string[])
+      : [],
+  };
+}
 
 router.get("/me/store", async (req: Request, res: Response) => {
   if (!req.isAuthenticated()) {
@@ -39,6 +55,7 @@ router.get("/me/store", async (req: Request, res: Response) => {
       pantry: row.pantry ?? [],
       scans: row.scans ?? [],
       shoppingList: row.shoppingList ?? [],
+      behaviorMeta: normalizeBehaviorMeta(row.behaviorMeta),
     }),
   );
 });
@@ -55,7 +72,7 @@ router.put("/me/store", async (req: Request, res: Response) => {
     return;
   }
 
-  const { pantry, scans, shoppingList } = parsed.data;
+  const { pantry, scans, shoppingList, behaviorMeta } = parsed.data;
 
   await db
     .insert(userDataTable)
@@ -64,6 +81,7 @@ router.put("/me/store", async (req: Request, res: Response) => {
       pantry,
       scans,
       shoppingList,
+      behaviorMeta: behaviorMeta ?? { cards: [], mutedFamilies: [] },
     })
     .onConflictDoUpdate({
       target: userDataTable.userId,
@@ -71,11 +89,24 @@ router.put("/me/store", async (req: Request, res: Response) => {
         pantry,
         scans,
         shoppingList,
+        ...(behaviorMeta !== undefined ? { behaviorMeta } : {}),
         updatedAt: new Date(),
       },
     });
 
-  res.json(GetMyStoreResponse.parse({ pantry, scans, shoppingList }));
+  const [saved] = await db
+    .select()
+    .from(userDataTable)
+    .where(eq(userDataTable.userId, req.user.id));
+
+  res.json(
+    GetMyStoreResponse.parse({
+      pantry,
+      scans,
+      shoppingList,
+      behaviorMeta: normalizeBehaviorMeta(saved?.behaviorMeta ?? behaviorMeta),
+    }),
+  );
 });
 
 router.patch("/me/profile", async (req: Request, res: Response) => {

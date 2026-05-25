@@ -60,6 +60,8 @@ export default function PantryScreen() {
     removeItem,
     addManualPantryItem,
     addManualShoppingItem,
+    setStockLevel,
+    predictionCtx,
   } = usePantry();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -138,7 +140,11 @@ export default function PantryScreen() {
         break;
       case "need":
       default:
-        list.sort((a, b) => getDaysUntilNeeded(a) - getDaysUntilNeeded(b));
+        list.sort(
+          (a, b) =>
+            getDaysUntilNeeded(a, predictionCtx) -
+            getDaysUntilNeeded(b, predictionCtx),
+        );
         break;
     }
 
@@ -159,7 +165,7 @@ export default function PantryScreen() {
           label: family,
           category: item.category,
           count: 1,
-          dueInDays: getDaysUntilNeeded(item),
+          dueInDays: getDaysUntilNeeded(item, predictionCtx),
           organicCount: item.isOrganic ? 1 : 0,
           members: [item],
         };
@@ -167,7 +173,10 @@ export default function PantryScreen() {
         output.push(group);
       } else {
         existing.count += 1;
-        existing.dueInDays = Math.min(existing.dueInDays, getDaysUntilNeeded(item));
+        existing.dueInDays = Math.min(
+          existing.dueInDays,
+          getDaysUntilNeeded(item, predictionCtx),
+        );
         existing.organicCount += item.isOrganic ? 1 : 0;
         existing.members.push(item);
       }
@@ -198,6 +207,8 @@ export default function PantryScreen() {
       <ItemDetailSheet
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
+        onSetStockLevel={setStockLevel}
+        predictionCtx={predictionCtx}
         onMarkConsumed={async (id) => {
           const it = selectedItem?.id === id ? selectedItem : pantry.find((p) => p.id === id);
           await markConsumed(id);

@@ -1,6 +1,7 @@
 import { type Request, type Response, type NextFunction } from "express";
 import type { AuthUser } from "@workspace/api-zod";
 import { clearSession, getSessionId, getSession } from "../lib/auth";
+import { isEmailVerificationRequired } from "../lib/features";
 
 function normalizeAuthUser(raw: AuthUser | undefined): AuthUser | undefined {
   if (!raw?.id) return undefined;
@@ -10,7 +11,9 @@ function normalizeAuthUser(raw: AuthUser | undefined): AuthUser | undefined {
       : raw.createdAt
         ? new Date(raw.createdAt as unknown as string)
         : new Date(0);
-  const emailVerified = raw.emailVerified === false ? false : true;
+  const emailVerified = isEmailVerificationRequired()
+    ? raw.emailVerified !== false
+    : true;
 
   return {
     id: raw.id,

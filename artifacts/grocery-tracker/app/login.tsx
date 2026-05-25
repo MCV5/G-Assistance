@@ -20,6 +20,7 @@ import { boldTheme as D } from "@/constants/colors";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { getAuthErrorMessage, getAuthErrorStatus } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
+import { REQUIRE_EMAIL_VERIFICATION } from "@/lib/features";
 
 type Mode = "login" | "signup";
 
@@ -67,15 +68,31 @@ export default function LoginScreen() {
     }
     try {
       setSubmitting(true);
+      const normalizedEmail = email.trim().toLowerCase();
       if (mode === "signup") {
-        await signup(email.trim().toLowerCase(), password, firstName);
+        await signup(normalizedEmail, password, firstName);
       } else {
-        await login(email.trim().toLowerCase(), password);
+        await login(normalizedEmail, password);
+      }
+      if (!REQUIRE_EMAIL_VERIFICATION) {
+        router.replace("/");
+      } else {
+        router.replace(
+          `/verify-email?email=${encodeURIComponent(normalizedEmail)}`,
+        );
       }
     } catch (err: unknown) {
       const authAction = mode === "signup" ? "signup" : "login";
       const message = getAuthErrorMessage(err, authAction);
-      if (mode === "signup" && getAuthErrorStatus(err) === 409) {
+      const status = getAuthErrorStatus(err);
+      if (
+        REQUIRE_EMAIL_VERIFICATION &&
+        status === 403 &&
+        message.toLowerCase().includes("verification")
+      ) {
+        setError(message);
+        router.replace("/verify-email");
+      } else if (mode === "signup" && status === 409) {
         switchMode("login");
         setError(message);
       } else {
@@ -216,6 +233,21 @@ export default function LoginScreen() {
 
           {error ? (
             <Text style={s.apiHint}>Server: {getApiBaseUrl()}</Text>
+          ) : null}
+
+          {REQUIRE_EMAIL_VERIFICATION ? (
+            <Pressable
+              style={s.forgotWrap}
+              onPress={() =>
+                router.push(
+                  email.trim()
+                    ? `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`
+                    : "/verify-email",
+                )
+              }
+            >
+              <Text style={s.forgotTxt}>Have a 6-digit code from email?</Text>
+            </Pressable>
           ) : null}
 
           {mode === "login" ? (

@@ -10,6 +10,7 @@ import React, {
 import type { ExtractedItem } from "@workspace/api-client-react";
 
 import { useAuth } from "@/lib/auth";
+import { REQUIRE_EMAIL_VERIFICATION } from "@/lib/features";
 import {
   computeAverageDaysBetweenPurchases,
   isPredictedNeeded,
@@ -139,7 +140,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (user?.emailVerified === false) {
+    if (REQUIRE_EMAIL_VERIFICATION && user?.emailVerified === false) {
       setPantry([]);
       setScans([]);
       setShoppingList([]);

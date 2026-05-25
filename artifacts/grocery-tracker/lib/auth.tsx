@@ -9,11 +9,9 @@ import React, {
 import * as SecureStore from "expo-secure-store";
 
 import {
-  confirmEmailVerification as apiConfirmEmailVerification,
   getCurrentAuthUser,
   logout as apiLogout,
   regenerateRecoveryCode as apiRegenerateRecoveryCode,
-  sendVerificationEmail as apiSendVerificationEmail,
   type AuthSuccess,
   type AuthUser,
   type SignupSuccess,
@@ -56,6 +54,10 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   pendingRecoveryCode: string | null;
+  /** False when the server could not send the verification email (e.g. Resend not configured). */
+  verificationEmailSent: boolean | null;
+  verificationEmailError: string | null;
+  clearVerificationEmailSent: () => void;
   /** Refetch /auth/user without clearing the session on failure (e.g. after profile PATCH). */
   syncAuthUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
@@ -83,6 +85,9 @@ const AuthContext = createContext<AuthContextValue>({
   isLoading: true,
   isAuthenticated: false,
   pendingRecoveryCode: null,
+  verificationEmailSent: null,
+  verificationEmailError: null,
+  clearVerificationEmailSent: () => {},
   syncAuthUser: async () => {},
   login: async () => {},
   signup: async () => {},
@@ -121,6 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [pendingRecoveryCode, setPendingRecoveryCode] = useState<string | null>(
     null,
   );
+  const [verificationEmailSent, setVerificationEmailSent] = useState<
+    boolean | null
+  >(null);
+  const [verificationEmailError, setVerificationEmailError] = useState<
+    string | null
+  >(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -174,6 +185,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback<AuthContextValue["login"]>(
     async (email, password) => {
+      await clearToken();
+      setUser(null);
       const result = await authPost<AuthSuccess>("/api/auth/login", {
         email,
         password,
@@ -185,12 +198,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = useCallback<AuthContextValue["signup"]>(
     async (email, password, firstName) => {
+      await clearToken();
+      setUser(null);
       const payload: Record<string, unknown> = { email, password };
       const trimmedName = firstName?.trim();
       if (trimmedName) payload.firstName = trimmedName;
 
-      const result = await authPost<SignupSuccess>("/api/auth/signup", payload);
+      const result = await authPost<
+        SignupSuccess & {
+          verificationEmailSent?: boolean;
+          verificationEmailError?: string;
+        }
+      >("/api/auth/signup", payload);
       setPendingRecoveryCode(result.recoveryCode);
+      setVerificationEmailSent(result.verificationEmailSent !== false);
+      setVerificationEmailError(result.verificationEmailError ?? null);
       await handleAuthSuccess(result.token, result.user);
     },
     [handleAuthSuccess],
@@ -239,27 +261,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     AuthContextValue["confirmEmailAddress"]
   >(async (email, options) => {
     const normalizedEmail = email.trim().toLowerCase();
+    const body: Record<string, unknown> = { email: normalizedEmail };
     if (options.code) {
-      await apiConfirmEmailVerification({
-        email: normalizedEmail,
-        code: options.code.replace(/\D/g, "").slice(0, 6),
-      });
-      return;
+      body.code = options.code.replace(/\D/g, "").slice(0, 6);
+    } else if (options.token) {
+      body.token = options.token;
+    } else {
+      throw new Error("Enter the 6-digit code from your email.");
     }
-    if (options.token) {
-      await apiConfirmEmailVerification({
-        email: normalizedEmail,
-        token: options.token,
-      });
-      return;
-    }
-    throw new Error("Enter the 6-digit code from your email.");
+    await authPost<{ success: boolean }>("/api/auth/verify-email/confirm", body);
   }, []);
 
   const resendVerificationEmail = useCallback<
     AuthContextValue["resendVerificationEmail"]
   >(async () => {
-    await apiSendVerificationEmail();
+    configureApiClient();
+    const result = await authPost<{
+      success: boolean;
+      emailSent?: boolean;
+      error?: string;
+    }>("/api/auth/verify-email/send", {});
+    const sent = result.emailSent !== false && result.success !== false;
+    setVerificationEmailSent(sent);
+    setVerificationEmailError(result.error ?? null);
+    if (!sent) {
+      throw new Error(
+        result.error ||
+          "The server could not send email. Check Render env vars and Resend domain verification.",
+      );
+    }
+  }, []);
+
+  const clearVerificationEmailSent = useCallback(() => {
+    setVerificationEmailSent(null);
+    setVerificationEmailError(null);
   }, []);
 
   return (
@@ -269,6 +304,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         pendingRecoveryCode,
+        verificationEmailSent,
+        verificationEmailError,
+        clearVerificationEmailSent,
         syncAuthUser,
         login,
         signup,

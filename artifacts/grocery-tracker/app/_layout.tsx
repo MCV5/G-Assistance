@@ -21,6 +21,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PantryProvider } from "@/contexts/PantryContext";
 import { configureApiClient } from "@/lib/apiBase";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { REQUIRE_EMAIL_VERIFICATION } from "@/lib/features";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -87,7 +88,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     if (isLoading || onboarded === null) return;
     const first = segments[0];
 
-    if (isAuthenticated && user?.emailVerified === false) {
+    if (
+      REQUIRE_EMAIL_VERIFICATION &&
+      isAuthenticated &&
+      user?.emailVerified === false
+    ) {
       if (first !== "verify-email") {
         router.replace("/verify-email");
       }

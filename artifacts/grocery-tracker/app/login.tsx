@@ -20,6 +20,7 @@ import { boldTheme as D } from "@/constants/colors";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { getAuthErrorMessage, getAuthErrorStatus } from "@/lib/auth-errors";
 import { useAuth } from "@/lib/auth";
+import { REQUIRE_EMAIL_VERIFICATION } from "@/lib/features";
 
 type Mode = "login" | "signup";
 
@@ -70,16 +71,22 @@ export default function LoginScreen() {
       const normalizedEmail = email.trim().toLowerCase();
       if (mode === "signup") {
         await signup(normalizedEmail, password, firstName);
-        router.replace(`/verify-email?email=${encodeURIComponent(normalizedEmail)}`);
       } else {
         await login(normalizedEmail, password);
-        router.replace(`/verify-email?email=${encodeURIComponent(normalizedEmail)}`);
+      }
+      if (!REQUIRE_EMAIL_VERIFICATION) {
+        router.replace("/");
+      } else {
+        router.replace(
+          `/verify-email?email=${encodeURIComponent(normalizedEmail)}`,
+        );
       }
     } catch (err: unknown) {
       const authAction = mode === "signup" ? "signup" : "login";
       const message = getAuthErrorMessage(err, authAction);
       const status = getAuthErrorStatus(err);
       if (
+        REQUIRE_EMAIL_VERIFICATION &&
         status === 403 &&
         message.toLowerCase().includes("verification")
       ) {
@@ -228,18 +235,20 @@ export default function LoginScreen() {
             <Text style={s.apiHint}>Server: {getApiBaseUrl()}</Text>
           ) : null}
 
-          <Pressable
-            style={s.forgotWrap}
-            onPress={() =>
-              router.push(
-                email.trim()
-                  ? `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`
-                  : "/verify-email",
-              )
-            }
-          >
-            <Text style={s.forgotTxt}>Have a 6-digit code from email?</Text>
-          </Pressable>
+          {REQUIRE_EMAIL_VERIFICATION ? (
+            <Pressable
+              style={s.forgotWrap}
+              onPress={() =>
+                router.push(
+                  email.trim()
+                    ? `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`
+                    : "/verify-email",
+                )
+              }
+            >
+              <Text style={s.forgotTxt}>Have a 6-digit code from email?</Text>
+            </Pressable>
+          ) : null}
 
           {mode === "login" ? (
             <Pressable

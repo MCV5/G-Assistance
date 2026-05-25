@@ -23,6 +23,7 @@ import {
   setSessionCookie,
   type SessionData,
 } from "../lib/auth";
+import { isEmailVerificationRequired } from "../lib/features";
 
 const router: IRouter = Router();
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
@@ -477,10 +478,27 @@ async function sendResetEmail(email: string, link: string): Promise<boolean> {
 }
 
 function isEmailVerifiedRow(row: typeof usersTable.$inferSelect): boolean {
+  if (!isEmailVerificationRequired()) {
+    return true;
+  }
   if (row.emailVerified === null || row.emailVerified === undefined) {
     return true;
   }
   return row.emailVerified;
+}
+
+async function markEmailVerifiedIfDisabled(userId: string): Promise<void> {
+  if (isEmailVerificationRequired()) return;
+  await db
+    .update(usersTable)
+    .set({
+      emailVerified: true,
+      emailVerifyTokenHash: null,
+      emailVerifyCodeHash: null,
+      emailVerifyTokenExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(usersTable.id, userId));
 }
 
 function normalizeProfileImageUrl(value: string | null | undefined): string | null {
@@ -591,20 +609,35 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     10,
   );
 
-  const verification = generateEmailVerificationCredentials();
+  const requireVerify = isEmailVerificationRequired();
+  const verification = requireVerify
+    ? generateEmailVerificationCredentials()
+    : null;
 
   let created: typeof usersTable.$inferSelect | undefined;
-  const fullInsertValues = {
-    email,
-    passwordHash,
-    recoveryCodeHash,
-    firstName,
-    lastName,
-    emailVerified: false as const,
-    emailVerifyTokenHash: verification.tokenHash,
-    emailVerifyCodeHash: verification.codeHash,
-    emailVerifyTokenExpiresAt: verification.expiresAt,
-  };
+  const fullInsertValues = requireVerify
+    ? {
+        email,
+        passwordHash,
+        recoveryCodeHash,
+        firstName,
+        lastName,
+        emailVerified: false as const,
+        emailVerifyTokenHash: verification!.tokenHash,
+        emailVerifyCodeHash: verification!.codeHash,
+        emailVerifyTokenExpiresAt: verification!.expiresAt,
+      }
+    : {
+        email,
+        passwordHash,
+        recoveryCodeHash,
+        firstName,
+        lastName,
+        emailVerified: true,
+        emailVerifyTokenHash: null,
+        emailVerifyCodeHash: null,
+        emailVerifyTokenExpiresAt: null,
+      };
   try {
     const inserted = await db.insert(usersTable).values(fullInsertValues).returning();
     created = inserted[0];
@@ -629,8 +662,8 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
               firstName,
               lastName,
               emailVerified: false,
-              emailVerifyTokenHash: verification.tokenHash,
-              emailVerifyTokenExpiresAt: verification.expiresAt,
+              emailVerifyTokenHash: verification!.tokenHash,
+              emailVerifyTokenExpiresAt: verification!.expiresAt,
             })
             .returning();
           created = inserted[0];
@@ -661,13 +694,15 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   void sendWelcomeEmail(email, firstName).catch((err) => {
     console.error("[auth] welcome email:", err);
   });
-  const emailDelivery = await sendVerificationEmail(email, {
-    token: verification.token,
-    code: verification.code,
-  });
-  if (!emailDelivery.sent) {
+  const emailDelivery = requireVerify
+    ? await sendVerificationEmail(email, {
+        token: verification!.token,
+        code: verification!.code,
+      })
+    : { sent: true as const };
+  if (requireVerify && !emailDelivery.sent) {
     console.warn(
-      `[auth] verification email NOT sent to ${email}: ${emailDelivery.error ?? "unknown"} code=${verification.code}`,
+      `[auth] verification email NOT sent to ${email}: ${emailDelivery.error ?? "unknown"} code=${verification!.code}`,
     );
   }
 
@@ -741,7 +776,13 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
 
-  const user = publicUser(row);
+  await markEmailVerifiedIfDisabled(row.id);
+
+  const [freshRow] = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, row.id));
+  const user = publicUser(freshRow ?? row);
   const sessionData: SessionData = { user };
   const sid = await createSession(sessionData);
   setSessionCookie(res, sid);

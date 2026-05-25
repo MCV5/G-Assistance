@@ -1,5 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
+import { isEmailVerificationRequired } from "../lib/features";
+
 /** Auth routes that must work even when logged in but email is not confirmed yet. */
 const ALLOW_WHILE_EMAIL_PENDING = new Set([
   "/api/auth/user",
@@ -23,6 +25,11 @@ function normalizePath(url: string): string {
  * except auth endpoints needed to finish verification or end the session.
  */
 export function emailVerifiedGate(req: Request, res: Response, next: NextFunction) {
+  if (!isEmailVerificationRequired()) {
+    next();
+    return;
+  }
+
   const path = normalizePath(req.originalUrl || req.url);
 
   if (!path.startsWith("/api")) {

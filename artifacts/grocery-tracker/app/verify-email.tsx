@@ -192,7 +192,12 @@ export default function VerifyEmailScreen() {
               <Text style={[styles.body, { color: colors.mutedForeground }]}>
                 Enter the <Text style={{ fontFamily: "Inter_600SemiBold" }}>6-digit code</Text>{" "}
                 sent to{" "}
-                <Text style={{ fontFamily: "Inter_600SemiBold", color: colors.foreground }]}>
+                <Text
+                  style={{
+                    fontFamily: "Inter_600SemiBold",
+                    color: colors.foreground,
+                  }}
+                >
                   {emailForConfirm || paramEmail || "your email"}
                 </Text>
                 . Email links do not open Expo Go — typing the code here always works.

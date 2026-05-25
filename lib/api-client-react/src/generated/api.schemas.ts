@@ -192,6 +192,46 @@ export interface ErrorEnvelope {
   error: string;
 }
 
+export interface BehaviorInsightRequest {
+  latestScanItemNames?: string[];
+  force?: boolean;
+}
+
+export type BehaviorCardType =
+  (typeof BehaviorCardType)[keyof typeof BehaviorCardType];
+
+export const BehaviorCardType = {
+  forgot_staple: "forgot_staple",
+  confirm_exhaustion: "confirm_exhaustion",
+  soft_reminder: "soft_reminder",
+  diet_shift: "diet_shift",
+} as const;
+
+export interface BehaviorCard {
+  id: string;
+  type: BehaviorCardType;
+  title: string;
+  message: string;
+  family?: string;
+  itemName?: string;
+  pantryItemId?: string;
+  /**
+   * @minimum 0
+   * @maximum 1
+   */
+  confidence: number;
+}
+
+export interface BehaviorMeta {
+  generatedAt?: string;
+  cards?: BehaviorCard[];
+  mutedFamilies?: string[];
+}
+
+export interface BehaviorInsightResponse {
+  behaviorMeta: BehaviorMeta;
+}
+
 export type UserStorePantryItem = { [key: string]: unknown };
 
 export type UserStoreScansItem = { [key: string]: unknown };
@@ -202,6 +242,7 @@ export interface UserStore {
   pantry: UserStorePantryItem[];
   scans: UserStoreScansItem[];
   shoppingList: UserStoreShoppingListItem[];
+  behaviorMeta?: BehaviorMeta;
 }
 
 /**

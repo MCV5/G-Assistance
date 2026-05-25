@@ -1,3 +1,5 @@
+import { getPersonalCycleDays } from "./personalIntervals";
+import { resolveShelfLifeDays } from "./shelfLifeDefaults";
 import type { ItemStatus, PantryItem, Purchase } from "./types";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
@@ -25,21 +27,56 @@ export function computeAverageDaysBetweenPurchases(
   return Math.round(sum / gaps.length);
 }
 
-export function predictNextNeededDate(item: PantryItem): Date {
+export type PredictionContext = {
+  pantry?: PantryItem[];
+  mutedFamilies?: string[];
+};
+
+export function getEffectiveCycleDays(
+  item: PantryItem,
+  ctx: PredictionContext = {},
+): number {
+  if (item.stockLevel === "empty") return 0;
+  if (item.stockLevel === "low") return 7;
+  const pantry = ctx.pantry ?? [];
+  if (pantry.length > 0) {
+    return getPersonalCycleDays(
+      item,
+      pantry,
+      ctx.mutedFamilies ?? [],
+    );
+  }
+  const shelf = resolveShelfLifeDays(
+    item.category,
+    item.name,
+    item.estimatedShelfLifeDays,
+  );
+  return item.averageDaysBetweenPurchases ?? shelf;
+}
+
+export function predictNextNeededDate(
+  item: PantryItem,
+  ctx: PredictionContext = {},
+): Date {
   const last = new Date(item.lastPurchasedAt);
-  const cycle =
-    item.averageDaysBetweenPurchases ?? item.estimatedShelfLifeDays;
+  const cycle = getEffectiveCycleDays(item, ctx);
   return new Date(last.getTime() + cycle * DAY_MS);
 }
 
-export function getDaysUntilNeeded(item: PantryItem): number {
-  const next = predictNextNeededDate(item);
+export function getDaysUntilNeeded(
+  item: PantryItem,
+  ctx: PredictionContext = {},
+): number {
+  const next = predictNextNeededDate(item, ctx);
   return daysBetween(new Date(), next);
 }
 
-export function getItemStatus(item: PantryItem): ItemStatus {
+export function getItemStatus(
+  item: PantryItem,
+  ctx: PredictionContext = {},
+): ItemStatus {
   if (item.consumed) return "expired";
-  const days = getDaysUntilNeeded(item);
+  const days = getDaysUntilNeeded(item, ctx);
   if (days < -3) return "expired";
   if (days <= 0) return "overdue";
   if (days <= 2) return "due";
@@ -62,15 +99,28 @@ export function getStatusLabel(status: ItemStatus): string {
   }
 }
 
-export function isPredictedNeeded(item: PantryItem): boolean {
+export function isPredictedNeeded(
+  item: PantryItem,
+  ctx: PredictionContext = {},
+): boolean {
   if (item.consumed) return false;
-  const status = getItemStatus(item);
-  return (
-    status === "due" ||
-    status === "overdue" ||
-    status === "expired" ||
-    status === "running-low"
-  );
+  if (item.stockLevel === "empty") return true;
+  const status = getItemStatus(item, ctx);
+  return status === "due" || status === "running-low";
+}
+
+export function urgencyLabel(
+  item: PantryItem,
+  ctx: PredictionContext = {},
+): {
+  text: string;
+  urgent: boolean;
+} {
+  const days = getDaysUntilNeeded(item, ctx);
+  if (days <= 0) return { text: "Check pantry", urgent: false };
+  if (days === 1) return { text: "Soon", urgent: false };
+  if (days <= 5) return { text: `~${days}d left`, urgent: false };
+  return { text: `~${days}d left`, urgent: false };
 }
 
 export function summarizeCadence(item: PantryItem): string {

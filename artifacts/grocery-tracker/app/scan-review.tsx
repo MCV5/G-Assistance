@@ -102,7 +102,7 @@ export default function ScanReviewScreen() {
         if (hours > DUPLICATE_SCAN_WARN_HOURS) return;
         Alert.alert(
           "Same receipt again?",
-          "This looks like a scan you already saved recently. Saving will increase quantities for matching items and add another activity entry. Tap Save only if that’s what you want.",
+          "This looks like a scan you already saved recently. Saving will refresh matching items (replace the old batch, not stack) and add another activity entry. Tap Save only if that’s what you want.",
           [{ text: "OK" }],
         );
       } catch {

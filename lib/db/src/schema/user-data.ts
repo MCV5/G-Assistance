@@ -9,6 +9,9 @@ export const userDataTable = pgTable("user_data", {
   pantry: jsonb("pantry").notNull().default(sql`'[]'::jsonb`),
   scans: jsonb("scans").notNull().default(sql`'[]'::jsonb`),
   shoppingList: jsonb("shopping_list").notNull().default(sql`'[]'::jsonb`),
+  behaviorMeta: jsonb("behavior_meta")
+    .notNull()
+    .default(sql`'{"cards":[],"mutedFamilies":[]}'::jsonb`),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()

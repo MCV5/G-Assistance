@@ -38,6 +38,17 @@ export interface Purchase {
   source: ScanSource | "manual";
 }
 
+/** Logged when an item cycle ends (rescan replace, confirmed out, etc.). */
+export interface ConsumptionRecord {
+  endedAt: string;
+  daysHeld: number;
+  reason: "replaced" | "confirmed_out" | "wasted";
+  family: string | null;
+  category: Category;
+}
+
+export type BulkStockLevel = "full" | "low" | "empty";
+
 export interface PantryItem {
   id: string;
   name: string;
@@ -56,6 +67,11 @@ export interface PantryItem {
   wasWasted?: boolean;
   wastedAt?: string;
   purchaseCount?: number;
+  /** User tapped "still have" — resets prediction clock. */
+  lastConfirmedAt?: string;
+  consumptionHistory?: ConsumptionRecord[];
+  /** Bulk staples (rice, flour): simple stock override. */
+  stockLevel?: BulkStockLevel;
 }
 
 export interface ScanRecord {
@@ -78,3 +94,26 @@ export interface ShoppingListItem {
 }
 
 export type ItemStatus = "fresh" | "running-low" | "due" | "overdue" | "expired";
+
+export type BehaviorCardType =
+  | "forgot_staple"
+  | "confirm_exhaustion"
+  | "soft_reminder"
+  | "diet_shift";
+
+export interface BehaviorCard {
+  id: string;
+  type: BehaviorCardType;
+  title: string;
+  message: string;
+  family?: string;
+  itemName?: string;
+  pantryItemId?: string;
+  confidence: number;
+}
+
+export interface BehaviorMeta {
+  generatedAt?: string;
+  cards: BehaviorCard[];
+  mutedFamilies: string[];
+}

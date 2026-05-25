@@ -282,10 +282,41 @@ export const GetMyStoreHeader = zod.object({
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
+export const getMyStoreResponseBehaviorMetaCardsItemConfidenceMin = 0;
+export const getMyStoreResponseBehaviorMetaCardsItemConfidenceMax = 1;
+
 export const GetMyStoreResponse = zod.object({
   pantry: zod.array(zod.record(zod.string(), zod.unknown())),
   scans: zod.array(zod.record(zod.string(), zod.unknown())),
   shoppingList: zod.array(zod.record(zod.string(), zod.unknown())),
+  behaviorMeta: zod
+    .object({
+      generatedAt: zod.coerce.date().optional(),
+      cards: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            type: zod.enum([
+              "forgot_staple",
+              "confirm_exhaustion",
+              "soft_reminder",
+              "diet_shift",
+            ]),
+            title: zod.string(),
+            message: zod.string(),
+            family: zod.string().optional(),
+            itemName: zod.string().optional(),
+            pantryItemId: zod.string().optional(),
+            confidence: zod
+              .number()
+              .min(getMyStoreResponseBehaviorMetaCardsItemConfidenceMin)
+              .max(getMyStoreResponseBehaviorMetaCardsItemConfidenceMax),
+          }),
+        )
+        .optional(),
+      mutedFamilies: zod.array(zod.string()).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -298,16 +329,127 @@ export const PutMyStoreHeader = zod.object({
     .describe("Opaque session token — `Bearer <sid>`."),
 });
 
+export const putMyStoreBodyBehaviorMetaCardsItemConfidenceMin = 0;
+export const putMyStoreBodyBehaviorMetaCardsItemConfidenceMax = 1;
+
 export const PutMyStoreBody = zod.object({
   pantry: zod.array(zod.record(zod.string(), zod.unknown())),
   scans: zod.array(zod.record(zod.string(), zod.unknown())),
   shoppingList: zod.array(zod.record(zod.string(), zod.unknown())),
+  behaviorMeta: zod
+    .object({
+      generatedAt: zod.coerce.date().optional(),
+      cards: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            type: zod.enum([
+              "forgot_staple",
+              "confirm_exhaustion",
+              "soft_reminder",
+              "diet_shift",
+            ]),
+            title: zod.string(),
+            message: zod.string(),
+            family: zod.string().optional(),
+            itemName: zod.string().optional(),
+            pantryItemId: zod.string().optional(),
+            confidence: zod
+              .number()
+              .min(putMyStoreBodyBehaviorMetaCardsItemConfidenceMin)
+              .max(putMyStoreBodyBehaviorMetaCardsItemConfidenceMax),
+          }),
+        )
+        .optional(),
+      mutedFamilies: zod.array(zod.string()).optional(),
+    })
+    .optional(),
 });
+
+export const putMyStoreResponseBehaviorMetaCardsItemConfidenceMin = 0;
+export const putMyStoreResponseBehaviorMetaCardsItemConfidenceMax = 1;
 
 export const PutMyStoreResponse = zod.object({
   pantry: zod.array(zod.record(zod.string(), zod.unknown())),
   scans: zod.array(zod.record(zod.string(), zod.unknown())),
   shoppingList: zod.array(zod.record(zod.string(), zod.unknown())),
+  behaviorMeta: zod
+    .object({
+      generatedAt: zod.coerce.date().optional(),
+      cards: zod
+        .array(
+          zod.object({
+            id: zod.string(),
+            type: zod.enum([
+              "forgot_staple",
+              "confirm_exhaustion",
+              "soft_reminder",
+              "diet_shift",
+            ]),
+            title: zod.string(),
+            message: zod.string(),
+            family: zod.string().optional(),
+            itemName: zod.string().optional(),
+            pantryItemId: zod.string().optional(),
+            confidence: zod
+              .number()
+              .min(putMyStoreResponseBehaviorMetaCardsItemConfidenceMin)
+              .max(putMyStoreResponseBehaviorMetaCardsItemConfidenceMax),
+          }),
+        )
+        .optional(),
+      mutedFamilies: zod.array(zod.string()).optional(),
+    })
+    .optional(),
+});
+
+/**
+ * @summary Generate contextual pantry insight cards (AI + statistics)
+ */
+export const PostBehaviorInsightHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const postBehaviorInsightBodyForceDefault = false;
+
+export const PostBehaviorInsightBody = zod.object({
+  latestScanItemNames: zod.array(zod.string()).optional(),
+  force: zod.boolean().default(postBehaviorInsightBodyForceDefault),
+});
+
+export const postBehaviorInsightResponseBehaviorMetaCardsItemConfidenceMin = 0;
+export const postBehaviorInsightResponseBehaviorMetaCardsItemConfidenceMax = 1;
+
+export const PostBehaviorInsightResponse = zod.object({
+  behaviorMeta: zod.object({
+    generatedAt: zod.coerce.date().optional(),
+    cards: zod
+      .array(
+        zod.object({
+          id: zod.string(),
+          type: zod.enum([
+            "forgot_staple",
+            "confirm_exhaustion",
+            "soft_reminder",
+            "diet_shift",
+          ]),
+          title: zod.string(),
+          message: zod.string(),
+          family: zod.string().optional(),
+          itemName: zod.string().optional(),
+          pantryItemId: zod.string().optional(),
+          confidence: zod
+            .number()
+            .min(postBehaviorInsightResponseBehaviorMetaCardsItemConfidenceMin)
+            .max(postBehaviorInsightResponseBehaviorMetaCardsItemConfidenceMax),
+        }),
+      )
+      .optional(),
+    mutedFamilies: zod.array(zod.string()).optional(),
+  }),
 });
 
 /**

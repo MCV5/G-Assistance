@@ -19,6 +19,8 @@ import type {
   ApiError,
   AuthSuccess,
   AuthUserEnvelope,
+  BehaviorInsightRequest,
+  BehaviorInsightResponse,
   ErrorEnvelope,
   HealthStatus,
   LoginRequest,
@@ -1026,6 +1028,92 @@ export const usePutMyStore = <
   TContext
 > => {
   return useMutation(getPutMyStoreMutationOptions(options));
+};
+
+/**
+ * @summary Generate contextual pantry insight cards (AI + statistics)
+ */
+export const getPostBehaviorInsightUrl = () => {
+  return `/api/me/behavior-insight`;
+};
+
+export const postBehaviorInsight = async (
+  behaviorInsightRequest?: BehaviorInsightRequest,
+  options?: RequestInit,
+): Promise<BehaviorInsightResponse> => {
+  return customFetch<BehaviorInsightResponse>(getPostBehaviorInsightUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(behaviorInsightRequest),
+  });
+};
+
+export const getPostBehaviorInsightMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postBehaviorInsight>>,
+    TError,
+    { data: BodyType<BehaviorInsightRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postBehaviorInsight>>,
+  TError,
+  { data: BodyType<BehaviorInsightRequest> },
+  TContext
+> => {
+  const mutationKey = ["postBehaviorInsight"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postBehaviorInsight>>,
+    { data: BodyType<BehaviorInsightRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postBehaviorInsight(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostBehaviorInsightMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postBehaviorInsight>>
+>;
+export type PostBehaviorInsightMutationBody = BodyType<BehaviorInsightRequest>;
+export type PostBehaviorInsightMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Generate contextual pantry insight cards (AI + statistics)
+ */
+export const usePostBehaviorInsight = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postBehaviorInsight>>,
+    TError,
+    { data: BodyType<BehaviorInsightRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof postBehaviorInsight>>,
+  TError,
+  { data: BodyType<BehaviorInsightRequest> },
+  TContext
+> => {
+  return useMutation(getPostBehaviorInsightMutationOptions(options));
 };
 
 /**

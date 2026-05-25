@@ -4,6 +4,7 @@
  * Api
  * OpenAPI spec version: 0.1.0
  */
+import type { BehaviorMeta } from "./behaviorMeta";
 import type { UserStorePantryItem } from "./userStorePantryItem";
 import type { UserStoreScansItem } from "./userStoreScansItem";
 import type { UserStoreShoppingListItem } from "./userStoreShoppingListItem";
@@ -12,4 +13,5 @@ export interface UserStore {
   pantry: UserStorePantryItem[];
   scans: UserStoreScansItem[];
   shoppingList: UserStoreShoppingListItem[];
+  behaviorMeta?: BehaviorMeta;
 }

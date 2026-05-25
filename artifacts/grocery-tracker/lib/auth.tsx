@@ -57,6 +57,7 @@ interface AuthContextValue {
   pendingRecoveryCode: string | null;
   /** False when the server could not send the verification email (e.g. Resend not configured). */
   verificationEmailSent: boolean | null;
+  verificationEmailError: string | null;
   clearVerificationEmailSent: () => void;
   /** Refetch /auth/user without clearing the session on failure (e.g. after profile PATCH). */
   syncAuthUser: () => Promise<void>;
@@ -125,6 +126,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const [verificationEmailSent, setVerificationEmailSent] = useState<
     boolean | null
+  >(null);
+  const [verificationEmailError, setVerificationEmailError] = useState<
+    string | null
   >(null);
 
   const refresh = useCallback(async () => {
@@ -195,10 +199,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (trimmedName) payload.firstName = trimmedName;
 
       const result = await authPost<
-        SignupSuccess & { verificationEmailSent?: boolean }
+        SignupSuccess & {
+          verificationEmailSent?: boolean;
+          verificationEmailError?: string;
+        }
       >("/api/auth/signup", payload);
       setPendingRecoveryCode(result.recoveryCode);
       setVerificationEmailSent(result.verificationEmailSent !== false);
+      setVerificationEmailError(result.verificationEmailError ?? null);
       await handleAuthSuccess(result.token, result.user);
     },
     [handleAuthSuccess],
@@ -268,21 +276,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     AuthContextValue["resendVerificationEmail"]
   >(async () => {
     configureApiClient();
-    const result = await authPost<{ success: boolean; emailSent?: boolean }>(
-      "/api/auth/verify-email/send",
-      {},
-    );
-    const sent = result.emailSent !== false;
+    const result = await authPost<{
+      success: boolean;
+      emailSent?: boolean;
+      error?: string;
+    }>("/api/auth/verify-email/send", {});
+    const sent = result.emailSent !== false && result.success !== false;
     setVerificationEmailSent(sent);
+    setVerificationEmailError(result.error ?? null);
     if (!sent) {
       throw new Error(
-        "The server could not send email. Ask the app owner to add RESEND_API_KEY and EMAIL_FROM on Render.",
+        result.error ||
+          "The server could not send email. Check Render env vars and Resend domain verification.",
       );
     }
   }, []);
 
   const clearVerificationEmailSent = useCallback(() => {
     setVerificationEmailSent(null);
+    setVerificationEmailError(null);
   }, []);
 
   return (
@@ -293,6 +305,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated: !!user,
         pendingRecoveryCode,
         verificationEmailSent,
+        verificationEmailError,
         clearVerificationEmailSent,
         syncAuthUser,
         login,

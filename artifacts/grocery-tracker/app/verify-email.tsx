@@ -27,6 +27,7 @@ export default function VerifyEmailScreen() {
     syncAuthUser,
     resendVerificationEmail,
     verificationEmailSent,
+    verificationEmailError,
     clearVerificationEmailSent,
     logout,
     user,
@@ -177,9 +178,12 @@ export default function VerifyEmailScreen() {
                 ]}
               >
                 <Text style={[styles.warnTxt, { color: colors.foreground }]}>
-                  We could not send a verification email from the server (email is not
-                  configured on Render yet). Tap Resend after email is set up, or ask the
-                  app owner to verify your account manually.
+                  We could not send a verification email from the server.
+                  {verificationEmailError
+                    ? `\n\nServer: ${verificationEmailError}`
+                    : ""}
+                  {"\n\n"}Tap Resend after fixing Render → Resend settings, or ask the app
+                  owner to verify your account in the database.
                 </Text>
               </View>
             ) : null}

@@ -249,78 +249,102 @@ function getWelcomeEmailTemplate(displayName: string): { text: string; html: str
   return { text, html };
 }
 
+function getResendApiKey(): string | undefined {
+  const key = process.env.RESEND_API_KEY?.trim();
+  return key || undefined;
+}
+
 function getMailFrom(): string | undefined {
-  return process.env.SMTP_FROM || process.env.EMAIL_FROM;
+  const from =
+    process.env.SMTP_FROM ||
+    process.env.EMAIL_FROM ||
+    process.env.RESEND_FROM ||
+    process.env.MAIL_FROM;
+  const trimmed = from?.trim();
+  return trimmed || undefined;
+}
+
+function maskFromAddress(from: string): string {
+  const at = from.indexOf("@");
+  if (at < 1) return "(invalid from address)";
+  return `***${from.slice(at)}`;
+}
+
+type EmailDeliveryResult = { sent: boolean; error?: string };
+
+async function resendApiSend(payload: {
+  from: string;
+  to: string[];
+  subject: string;
+  text: string;
+  html: string;
+}): Promise<void> {
+  const apiKey = getResendApiKey();
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is missing on the server.");
+  }
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: string;
+    name?: string;
+  };
+  if (!res.ok) {
+    const detail = body?.message || body?.name || `HTTP ${res.status}`;
+    throw new Error(`Resend: ${detail}`);
+  }
 }
 
 async function sendResetEmailViaResend(
   to: string,
   template: ReturnType<typeof getResetEmailTemplate>,
 ): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
   const from = getMailFrom();
-  if (!apiKey || !from) {
-    throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
+  if (!from) {
+    throw new Error("EMAIL_FROM or SMTP_FROM is missing on the server.");
   }
 
   const subject = `Reset your ${process.env.APP_NAME || DEFAULT_APP_NAME} password`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text: template.text,
-      html: template.html,
-    }),
+  await resendApiSend({
+    from,
+    to: [to],
+    subject,
+    text: template.text,
+    html: template.html,
   });
-
-  const body = (await res.json().catch(() => ({}))) as { message?: string };
-  if (!res.ok) {
-    throw new Error(body?.message || `Resend error: ${res.status}`);
-  }
 }
 
 async function sendVerifyEmailViaResend(
   to: string,
   template: ReturnType<typeof getVerifyEmailTemplate>,
 ): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
   const from = getMailFrom();
-  if (!apiKey || !from) {
-    throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
+  if (!from) {
+    throw new Error("EMAIL_FROM or SMTP_FROM is missing on the server.");
   }
 
   const subject = `Confirm your email — ${process.env.APP_NAME || DEFAULT_APP_NAME}`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text: template.text,
-      html: template.html,
-    }),
+  await resendApiSend({
+    from,
+    to: [to],
+    subject,
+    text: template.text,
+    html: template.html,
   });
-
-  const body = (await res.json().catch(() => ({}))) as { message?: string };
-  if (!res.ok) {
-    throw new Error(body?.message || `Resend error: ${res.status}`);
-  }
 }
 
 async function sendVerificationEmail(
   email: string,
   creds: { token: string; code: string },
-): Promise<boolean> {
+): Promise<EmailDeliveryResult> {
   const webLink = buildVerifyEmailWebLink(email, creds.token);
   const appLink = buildVerifyAppDeepLink(email, creds.code);
   const template = getVerifyEmailTemplate({
@@ -329,67 +353,65 @@ async function sendVerificationEmail(
     appLink,
   });
 
-  if (process.env.RESEND_API_KEY && getMailFrom()) {
+  if (getResendApiKey() && getMailFrom()) {
     try {
       await sendVerifyEmailViaResend(email, template);
-      return true;
+      return { sent: true };
     } catch (err) {
-      console.error("[auth] Resend verify-email send failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[auth] Resend verify-email send failed:", message);
       console.info(
         `[auth] verify-email fallback for ${email}: code=${creds.code} app=${appLink} web=${webLink}`,
       );
-      return false;
+      return { sent: false, error: message };
     }
   }
 
-  if (!process.env.SMTP_URL || !getMailFrom()) {
+  if (!process.env.SMTP_URL?.trim() || !getMailFrom()) {
+    const missing = !getResendApiKey()
+      ? "RESEND_API_KEY is not set on the server."
+      : !getMailFrom()
+        ? "EMAIL_FROM (or SMTP_FROM) is not set on the server."
+        : "Email is not configured.";
     console.info(
-      `[auth] verify-email fallback for ${email}: code=${creds.code} app=${appLink} web=${webLink}`,
+      `[auth] verify-email fallback for ${email}: code=${creds.code} (${missing})`,
     );
-    return false;
+    return { sent: false, error: missing };
   }
 
-  const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-  await transporter.sendMail({
-    from: getMailFrom(),
-    to: email,
-    subject: `Confirm your email — ${process.env.APP_NAME || DEFAULT_APP_NAME}`,
-    text: template.text,
-    html: template.html,
-  });
-  return true;
+  try {
+    const transporter = nodemailer.createTransport(process.env.SMTP_URL);
+    await transporter.sendMail({
+      from: getMailFrom(),
+      to: email,
+      subject: `Confirm your email — ${process.env.APP_NAME || DEFAULT_APP_NAME}`,
+      text: template.text,
+      html: template.html,
+    });
+    return { sent: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[auth] SMTP verify-email send failed:", message);
+    return { sent: false, error: message };
+  }
 }
 
 async function sendWelcomeEmailViaResend(
   to: string,
   template: ReturnType<typeof getWelcomeEmailTemplate>,
 ): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
   const from = getMailFrom();
-  if (!apiKey || !from) {
-    throw new Error("RESEND_API_KEY and SMTP_FROM or EMAIL_FROM are required for Resend.");
+  if (!from) {
+    throw new Error("EMAIL_FROM or SMTP_FROM is missing on the server.");
   }
 
-  const subject = `Welcome to ${process.env.APP_NAME || DEFAULT_APP_NAME}`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text: template.text,
-      html: template.html,
-    }),
+  await resendApiSend({
+    from,
+    to: [to],
+    subject: `Welcome to ${process.env.APP_NAME || DEFAULT_APP_NAME}`,
+    text: template.text,
+    html: template.html,
   });
-
-  const body = (await res.json().catch(() => ({}))) as { message?: string };
-  if (!res.ok) {
-    throw new Error(body?.message || `Resend error: ${res.status}`);
-  }
 }
 
 async function sendWelcomeEmail(
@@ -399,7 +421,7 @@ async function sendWelcomeEmail(
   const displayName = (firstName?.trim() || email.split("@")[0] || "there").trim();
   const template = getWelcomeEmailTemplate(displayName);
 
-  if (process.env.RESEND_API_KEY && getMailFrom()) {
+  if (getResendApiKey() && getMailFrom()) {
     try {
       await sendWelcomeEmailViaResend(email, template);
       return true;
@@ -409,7 +431,7 @@ async function sendWelcomeEmail(
     }
   }
 
-  if (!process.env.SMTP_URL || !getMailFrom()) {
+  if (!process.env.SMTP_URL?.trim() || !getMailFrom()) {
     return false;
   }
 
@@ -427,7 +449,7 @@ async function sendWelcomeEmail(
 async function sendResetEmail(email: string, link: string): Promise<boolean> {
   const template = getResetEmailTemplate(link);
 
-  if (process.env.RESEND_API_KEY && getMailFrom()) {
+  if (getResendApiKey() && getMailFrom()) {
     try {
       await sendResetEmailViaResend(email, template);
       return true;
@@ -438,7 +460,7 @@ async function sendResetEmail(email: string, link: string): Promise<boolean> {
     }
   }
 
-  if (!process.env.SMTP_URL || !getMailFrom()) {
+  if (!process.env.SMTP_URL?.trim() || !getMailFrom()) {
     console.info(`[auth] password reset link for ${email}: ${link}`);
     return false;
   }
@@ -639,13 +661,13 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
   void sendWelcomeEmail(email, firstName).catch((err) => {
     console.error("[auth] welcome email:", err);
   });
-  const verificationEmailSent = await sendVerificationEmail(email, {
+  const emailDelivery = await sendVerificationEmail(email, {
     token: verification.token,
     code: verification.code,
   });
-  if (!verificationEmailSent) {
+  if (!emailDelivery.sent) {
     console.warn(
-      `[auth] verification email NOT sent to ${email} — set RESEND_API_KEY + EMAIL_FROM (or SMTP_URL) on the server. code=${verification.code}`,
+      `[auth] verification email NOT sent to ${email}: ${emailDelivery.error ?? "unknown"} code=${verification.code}`,
     );
   }
 
@@ -654,7 +676,13 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
     const sessionData: SessionData = { user };
     const sid = await createSession(sessionData);
     setSessionCookie(res, sid);
-    const payload = { user, token: sid, recoveryCode, verificationEmailSent };
+    const payload = {
+      user,
+      token: sid,
+      recoveryCode,
+      verificationEmailSent: emailDelivery.sent,
+      verificationEmailError: emailDelivery.error,
+    };
     const parsedResponse = SignupResponse.safeParse({
       user,
       token: sid,
@@ -665,7 +693,11 @@ router.post("/auth/signup", async (req: Request, res: Response) => {
       res.json(payload);
       return;
     }
-    res.json({ ...parsedResponse.data, verificationEmailSent });
+    res.json({
+      ...parsedResponse.data,
+      verificationEmailSent: emailDelivery.sent,
+      verificationEmailError: emailDelivery.error,
+    });
   } catch (err) {
     console.error("[auth] signup session or response failed:", err);
     if (isLikelyMissingSchemaColumnError(err)) {
@@ -949,17 +981,54 @@ router.post("/auth/verify-email/send", async (req: Request, res: Response) => {
     })
     .where(eq(usersTable.id, row.id));
 
-  const emailSent = await sendVerificationEmail(row.email, {
+  const emailDelivery = await sendVerificationEmail(row.email, {
     token: verification.token,
     code: verification.code,
   });
-  if (!emailSent) {
+  if (!emailDelivery.sent) {
     console.warn(
-      `[auth] resend verify-email NOT sent to ${row.email} — configure RESEND_API_KEY + EMAIL_FROM. code=${verification.code}`,
+      `[auth] resend verify-email NOT sent to ${row.email}: ${emailDelivery.error ?? "unknown"} code=${verification.code}`,
     );
   }
 
-  res.json({ success: true, emailSent });
+  res.status(emailDelivery.sent ? 200 : 503).json({
+    success: emailDelivery.sent,
+    emailSent: emailDelivery.sent,
+    error: emailDelivery.error,
+  });
+});
+
+/**
+ * Safe diagnostics — open in a browser after deploy:
+ * https://<your-service>.onrender.com/api/auth/email-config
+ */
+router.get("/auth/email-config", (_req, res) => {
+  const key = getResendApiKey();
+  const from = getMailFrom();
+  const smtp = process.env.SMTP_URL?.trim();
+
+  let hint: string | undefined;
+  if (!key && !smtp) {
+    hint =
+      "Add RESEND_API_KEY and EMAIL_FROM on Render → Environment, then redeploy.";
+  } else if (key && !from) {
+    hint =
+      'Add EMAIL_FROM (e.g. Goalcery <noreply@your-verified-domain.com>). The domain must be verified in Resend.';
+  } else if (key && from && !from.includes("@")) {
+    hint = 'EMAIL_FROM must look like: Goalcery <name@your-domain.com>';
+  } else if (key && from) {
+    hint =
+      "Resend env vars are present. If users still get no mail, check Resend → Emails for bounces and confirm the FROM domain is verified. On Resend test mode, mail may only reach your Resend account email.";
+  }
+
+  res.json({
+    resendApiKeyPresent: Boolean(key),
+    fromAddressPresent: Boolean(from),
+    fromAddressMasked: from ? maskFromAddress(from) : null,
+    smtpUrlPresent: Boolean(smtp),
+    ready: Boolean((key && from) || (smtp && from)),
+    hint,
+  });
 });
 
 export default router;

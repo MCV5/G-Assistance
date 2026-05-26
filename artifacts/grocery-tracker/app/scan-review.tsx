@@ -142,6 +142,7 @@ export default function ScanReviewScreen() {
         initial.sourceType,
         initial.storeName,
         resolved.value,
+        initial.barcode ? { barcode: initial.barcode } : undefined,
       );
       if (initial.imageFingerprint) {
         try {

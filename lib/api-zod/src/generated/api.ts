@@ -404,6 +404,59 @@ export const PutMyStoreResponse = zod.object({
 });
 
 /**
+ * @summary Look up nutrition by barcode (Open Food Facts) or product name (USDA FDC)
+ */
+export const PostNutritionLookupHeader = zod.object({
+  Authorization: zod
+    .string()
+    .optional()
+    .describe("Opaque session token — `Bearer <sid>`."),
+});
+
+export const PostNutritionLookupBody = zod.object({
+  barcode: zod.string().optional(),
+  productName: zod.string().optional(),
+});
+
+export const PostNutritionLookupResponse = zod.object({
+  matched: zod.boolean(),
+  source: zod.enum(["open_food_facts", "usda_fdc", "none"]),
+  productName: zod.string().optional(),
+  barcode: zod.string().optional(),
+  fdcId: zod.number().optional(),
+  per100g: zod
+    .object({
+      caloriesKcal: zod.number().nullish(),
+      proteinG: zod.number().nullish(),
+      carbsG: zod.number().nullish(),
+      fatG: zod.number().nullish(),
+      fiberG: zod.number().nullish(),
+    })
+    .optional(),
+  perServing: zod
+    .object({
+      caloriesKcal: zod.number().nullish(),
+      proteinG: zod.number().nullish(),
+      carbsG: zod.number().nullish(),
+      fatG: zod.number().nullish(),
+      fiberG: zod.number().nullish(),
+    })
+    .optional(),
+  servingDescription: zod.string().optional(),
+  nutriScore: zod.string().optional(),
+  note: zod.string(),
+  fetchedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Whether USDA FDC key is configured on the server
+ */
+export const GetNutritionConfigResponse = zod.object({
+  usdaConfigured: zod.boolean(),
+  openFoodFacts: zod.boolean(),
+});
+
+/**
  * @summary Generate contextual pantry insight cards (AI + statistics)
  */
 export const PostBehaviorInsightHeader = zod.object({

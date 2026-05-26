@@ -16,6 +16,7 @@ import {
   fetchBehaviorInsight,
   shouldRefreshBehaviorInsight,
 } from "@/lib/behaviorInsights";
+import { fetchNutritionForItem } from "@/lib/nutritionApi";
 import { makePredictionContext } from "@/lib/predictionContext";
 import {
   computeAverageDaysBetweenPurchases,
@@ -52,7 +53,9 @@ interface PantryContextValue {
     sourceType: ScanSource,
     storeName?: string,
     purchaseDate?: string,
+    options?: { barcode?: string },
   ) => Promise<ScanRecord>;
+  enrichNutritionForItems: (itemIds: string[], barcode?: string) => Promise<void>;
   markConsumed: (id: string) => Promise<void>;
   markWasted: (id: string) => Promise<void>;
   unmarkConsumed: (id: string) => Promise<void>;
@@ -275,12 +278,63 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     [queueSave],
   );
 
+  const enrichNutritionForItems = useCallback(
+    async (itemIds: string[], barcode?: string) => {
+      if (!canSaveRef.current) return;
+      let next = [...stateRef.current.pantry];
+      let changed = false;
+      for (const id of itemIds.slice(0, 10)) {
+        const item = next.find((p) => p.id === id);
+        if (!item || item.nutrition) continue;
+        if (
+          item.category === "Household" ||
+          item.category === "Personal Care"
+        ) {
+          continue;
+        }
+        try {
+          const snap = await fetchNutritionForItem({
+            barcode: barcode ?? item.barcode,
+            productName: item.name,
+          });
+          if (!snap) continue;
+          next = next.map((p) =>
+            p.id === id
+              ? {
+                  ...p,
+                  nutrition: snap,
+                  barcode: snap.barcode ?? p.barcode ?? barcode,
+                }
+              : p,
+          );
+          changed = true;
+        } catch (err) {
+          console.warn("Nutrition lookup failed for", item.name, err);
+        }
+      }
+      if (changed) {
+        const ctx = makePredictionContext(
+          next,
+          stateRef.current.behaviorMeta?.mutedFamilies ?? [],
+        );
+        setPantry(next);
+        setShoppingList((cur) =>
+          rebuildPredictedShoppingList(next, cur, ctx),
+        );
+        queueSave();
+      }
+    },
+    [queueSave],
+  );
+
   const addScannedItems = useCallback<PantryContextValue["addScannedItems"]>(
-    async (items, sourceType, storeName, purchaseDate) => {
+    async (items, sourceType, storeName, purchaseDate, options) => {
       const now = new Date().toISOString();
       const purchaseDateIso = purchaseDate ?? now;
+      const scanBarcode = options?.barcode?.replace(/\D/g, "");
 
       const next: PantryItem[] = [...pantry];
+      const touchedIds: string[] = [];
 
       for (const incoming of items) {
         const cat = coerceCategory(incoming.name, incoming.category);
@@ -324,7 +378,9 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             consumed: false,
             consumptionHistory,
             stockLevel: undefined,
+            barcode: existing.barcode ?? scanBarcode,
           };
+          touchedIds.push(existing.id);
         } else {
           const purchase = {
             date: purchaseDateIso,
@@ -332,8 +388,9 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             unit: incoming.unit,
             source: sourceType,
           };
+          const newItemId = newId();
           next.push({
-            id: newId(),
+            id: newItemId,
             name: incoming.name.trim(),
             category: cat,
             isOrganic: incoming.isOrganic,
@@ -352,7 +409,9 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
             purchases: [purchase],
             averageDaysBetweenPurchases: null,
             consumed: false,
+            barcode: scanBarcode,
           });
+          touchedIds.push(newItemId);
         }
       }
 
@@ -373,10 +432,18 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
 
       const scanNames = items.map((i) => i.name);
       void refreshBehaviorInsights(scanNames, true);
+      void enrichNutritionForItems(touchedIds, scanBarcode);
 
       return scan;
     },
-    [pantry, scans, queueSave, behaviorMeta.mutedFamilies, refreshBehaviorInsights],
+    [
+      pantry,
+      scans,
+      queueSave,
+      behaviorMeta.mutedFamilies,
+      refreshBehaviorInsights,
+      enrichNutritionForItems,
+    ],
   );
 
   const markConsumed = useCallback(
@@ -627,6 +694,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       loading,
       refreshBehaviorInsights,
       dismissBehaviorCard,
+      enrichNutritionForItems,
       addScannedItems,
       markConsumed,
       markWasted,
@@ -652,6 +720,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       loading,
       refreshBehaviorInsights,
       dismissBehaviorCard,
+      enrichNutritionForItems,
       addScannedItems,
       markConsumed,
       markWasted,

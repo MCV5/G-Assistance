@@ -295,6 +295,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+  /nutrition/lookup:
+    post:
+      tags: [nutrition]
+      operationId: postNutritionLookup
+      summary: Look up nutrition by barcode (Open Food Facts) or product name (USDA FDC)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NutritionLookupRequest'
+      responses:
+        '200':
+          description: Nutrition lookup result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionLookupResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /nutrition/config:
+    get:
+      tags: [nutrition]
+      operationId: getNutritionConfig
+      summary: Whether USDA FDC key is configured on the server
+      responses:
+        '200':
+          description: Config flags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NutritionConfigResponse'
   /me/behavior-insight:
     post:
       tags: [store]
@@ -668,6 +713,67 @@ components:
           type: number
           minimum: 0
           maximum: 1
+    NutritionLookupRequest:
+      type: object
+      properties:
+        barcode:
+          type: string
+        productName:
+          type: string
+    MacroNutrients:
+      type: object
+      properties:
+        caloriesKcal:
+          type: number
+          nullable: true
+        proteinG:
+          type: number
+          nullable: true
+        carbsG:
+          type: number
+          nullable: true
+        fatG:
+          type: number
+          nullable: true
+        fiberG:
+          type: number
+          nullable: true
+    NutritionLookupResponse:
+      type: object
+      required: [matched, source, note, fetchedAt]
+      properties:
+        matched:
+          type: boolean
+        source:
+          type: string
+          enum: [open_food_facts, usda_fdc, none]
+        productName:
+          type: string
+        barcode:
+          type: string
+        fdcId:
+          type: integer
+        per100g:
+          $ref: '#/components/schemas/MacroNutrients'
+        perServing:
+          $ref: '#/components/schemas/MacroNutrients'
+        servingDescription:
+          type: string
+        nutriScore:
+          type: string
+        note:
+          type: string
+        fetchedAt:
+          type: string
+          format: date-time
+    NutritionConfigResponse:
+      type: object
+      required: [usdaConfigured, openFoodFacts]
+      properties:
+        usdaConfigured:
+          type: boolean
+        openFoodFacts:
+          type: boolean
     BehaviorMeta:
       type: object
       properties:

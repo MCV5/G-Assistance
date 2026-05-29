@@ -62,6 +62,7 @@ export default function PantryScreen() {
     addManualShoppingItem,
     setStockLevel,
     predictionCtx,
+    enrichNutritionForItems,
   } = usePantry();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -209,6 +210,7 @@ export default function PantryScreen() {
         onClose={() => setSelectedItem(null)}
         onSetStockLevel={setStockLevel}
         predictionCtx={predictionCtx}
+        onFetchNutrition={(id) => enrichNutritionForItems([id])}
         onMarkConsumed={async (id) => {
           const it = selectedItem?.id === id ? selectedItem : pantry.find((p) => p.id === id);
           await markConsumed(id);

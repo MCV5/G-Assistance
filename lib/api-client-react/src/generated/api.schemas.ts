@@ -232,6 +232,47 @@ export interface BehaviorInsightResponse {
   behaviorMeta: BehaviorMeta;
 }
 
+export interface NutritionLookupRequest {
+  barcode?: string;
+  productName?: string;
+}
+
+export interface MacroNutrients {
+  caloriesKcal?: number | null;
+  proteinG?: number | null;
+  carbsG?: number | null;
+  fatG?: number | null;
+  fiberG?: number | null;
+}
+
+export type NutritionLookupResponseSource =
+  (typeof NutritionLookupResponseSource)[keyof typeof NutritionLookupResponseSource];
+
+export const NutritionLookupResponseSource = {
+  open_food_facts: "open_food_facts",
+  usda_fdc: "usda_fdc",
+  none: "none",
+} as const;
+
+export interface NutritionLookupResponse {
+  matched: boolean;
+  source: NutritionLookupResponseSource;
+  productName?: string;
+  barcode?: string;
+  fdcId?: number;
+  per100g?: MacroNutrients;
+  perServing?: MacroNutrients;
+  servingDescription?: string;
+  nutriScore?: string;
+  note: string;
+  fetchedAt: string;
+}
+
+export interface NutritionConfigResponse {
+  usdaConfigured: boolean;
+  openFoodFacts: boolean;
+}
+
 export type UserStorePantryItem = { [key: string]: unknown };
 
 export type UserStoreScansItem = { [key: string]: unknown };

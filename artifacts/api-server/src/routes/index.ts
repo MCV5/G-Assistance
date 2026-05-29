@@ -4,6 +4,7 @@ import groceriesRouter from "./groceries";
 import authRouter from "./auth";
 import meRouter from "./me";
 import behaviorRouter from "./behavior";
+import nutritionRouter from "./nutrition";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(groceriesRouter);
 router.use(authRouter);
 router.use(meRouter);
 router.use(behaviorRouter);
+router.use(nutritionRouter);
 
 export default router;

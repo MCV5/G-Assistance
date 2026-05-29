@@ -25,6 +25,9 @@ import type {
   HealthStatus,
   LoginRequest,
   LogoutSuccess,
+  NutritionConfigResponse,
+  NutritionLookupRequest,
+  NutritionLookupResponse,
   PasswordResetRequest,
   PasswordResetSuccess,
   PatchMyProfileRequest,
@@ -1029,6 +1032,167 @@ export const usePutMyStore = <
 > => {
   return useMutation(getPutMyStoreMutationOptions(options));
 };
+
+/**
+ * @summary Look up nutrition by barcode (Open Food Facts) or product name (USDA FDC)
+ */
+export const getPostNutritionLookupUrl = () => {
+  return `/api/nutrition/lookup`;
+};
+
+export const postNutritionLookup = async (
+  nutritionLookupRequest: NutritionLookupRequest,
+  options?: RequestInit,
+): Promise<NutritionLookupResponse> => {
+  return customFetch<NutritionLookupResponse>(getPostNutritionLookupUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(nutritionLookupRequest),
+  });
+};
+
+export const getPostNutritionLookupMutationOptions = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postNutritionLookup>>,
+    TError,
+    { data: BodyType<NutritionLookupRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postNutritionLookup>>,
+  TError,
+  { data: BodyType<NutritionLookupRequest> },
+  TContext
+> => {
+  const mutationKey = ["postNutritionLookup"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postNutritionLookup>>,
+    { data: BodyType<NutritionLookupRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postNutritionLookup(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostNutritionLookupMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postNutritionLookup>>
+>;
+export type PostNutritionLookupMutationBody = BodyType<NutritionLookupRequest>;
+export type PostNutritionLookupMutationError = ErrorType<ErrorEnvelope>;
+
+/**
+ * @summary Look up nutrition by barcode (Open Food Facts) or product name (USDA FDC)
+ */
+export const usePostNutritionLookup = <
+  TError = ErrorType<ErrorEnvelope>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postNutritionLookup>>,
+    TError,
+    { data: BodyType<NutritionLookupRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof postNutritionLookup>>,
+  TError,
+  { data: BodyType<NutritionLookupRequest> },
+  TContext
+> => {
+  return useMutation(getPostNutritionLookupMutationOptions(options));
+};
+
+/**
+ * @summary Whether USDA FDC key is configured on the server
+ */
+export const getGetNutritionConfigUrl = () => {
+  return `/api/nutrition/config`;
+};
+
+export const getNutritionConfig = async (
+  options?: RequestInit,
+): Promise<NutritionConfigResponse> => {
+  return customFetch<NutritionConfigResponse>(getGetNutritionConfigUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNutritionConfigQueryKey = () => {
+  return [`/api/nutrition/config`] as const;
+};
+
+export const getGetNutritionConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNutritionConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNutritionConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNutritionConfigQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNutritionConfig>>
+  > = ({ signal }) => getNutritionConfig({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNutritionConfig>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNutritionConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNutritionConfig>>
+>;
+export type GetNutritionConfigQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Whether USDA FDC key is configured on the server
+ */
+
+export function useGetNutritionConfig<
+  TData = Awaited<ReturnType<typeof getNutritionConfig>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getNutritionConfig>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNutritionConfigQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Generate contextual pantry insight cards (AI + statistics)

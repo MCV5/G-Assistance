@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import { useEffect, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -11,10 +12,8 @@ import {
 import { boldTheme as D } from "@/constants/colors";
 import { CategoryIcon } from "@/components/CategoryIcon";
 import { StatusPill } from "@/components/StatusPill";
-import {
-  getNutritionEstimate,
-  getInsightContribution,
-} from "@/lib/itemInsights";
+import { getInsightContribution } from "@/lib/itemInsights";
+import { nutritionPanelForItem } from "@/lib/nutritionDisplay";
 import {
   daysBetween,
   getDaysUntilNeeded,
@@ -35,6 +34,7 @@ interface Props {
   onDelete: (id: string) => void;
   onSetStockLevel?: (id: string, level: BulkStockLevel) => void | Promise<void>;
   predictionCtx?: import("@/lib/predictions").PredictionContext;
+  onFetchNutrition?: (id: string) => void | Promise<void>;
 }
 
 function formatTimeline(item: PantryItem, days: number): string {
@@ -72,7 +72,25 @@ export function ItemDetailSheet({
   onDelete,
   onSetStockLevel,
   predictionCtx = {},
+  onFetchNutrition,
 }: Props) {
+  const [loadingNutrition, setLoadingNutrition] = useState(false);
+
+  useEffect(() => {
+    if (!item || item.nutrition || !onFetchNutrition) return;
+    if (item.category === "Household" || item.category === "Personal Care") {
+      return;
+    }
+    let cancelled = false;
+    setLoadingNutrition(true);
+    void Promise.resolve(onFetchNutrition(item.id)).finally(() => {
+      if (!cancelled) setLoadingNutrition(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [item?.id, item?.nutrition, onFetchNutrition, item?.category]);
+
   if (!item) return null;
 
   const status = getItemStatus(item, predictionCtx);
@@ -86,7 +104,7 @@ export function ItemDetailSheet({
   );
   const stockLevel = item.stockLevel ?? "full";
   const borderColor = statusBorderColor(status);
-  const nutrition = getNutritionEstimate(item);
+  const nutritionPanel = nutritionPanelForItem(item);
   const insightNote = getInsightContribution(item);
   const isNonFood =
     item.category === "Household" || item.category === "Personal Care";
@@ -188,18 +206,43 @@ export function ItemDetailSheet({
               <View style={s.card}>
                 <View style={s.cardHeader}>
                   <Feather name="bar-chart-2" size={13} color={D.greenMid} />
-                  <Text style={s.cardTitle}>GENERIC NUTRITION ESTIMATE</Text>
+                  <Text style={s.cardTitle}>{nutritionPanel.title}</Text>
                 </View>
 
-                <View style={s.nutGrid}>
-                  <NutRow label="Calories" value={nutrition.calories} />
-                  <NutRow label="Protein" value={nutrition.protein} />
-                  <NutRow label="Carbs" value={nutrition.carbs} />
-                  <NutRow label="Fat" value={nutrition.fat} />
-                  <NutRow label="Fiber" value={nutrition.fiber} />
-                </View>
-
-                <Text style={s.nutNote}>{nutrition.note}</Text>
+                {loadingNutrition && !item.nutrition ? (
+                  <Text style={s.nutNote}>Looking up nutrition…</Text>
+                ) : (
+                  <>
+                    <View style={s.nutGrid}>
+                      <NutRow
+                        label="Calories"
+                        value={nutritionPanel.estimate.calories}
+                      />
+                      <NutRow
+                        label="Protein"
+                        value={nutritionPanel.estimate.protein}
+                      />
+                      <NutRow
+                        label="Carbs"
+                        value={nutritionPanel.estimate.carbs}
+                      />
+                      <NutRow label="Fat" value={nutritionPanel.estimate.fat} />
+                      <NutRow
+                        label="Fiber"
+                        value={nutritionPanel.estimate.fiber}
+                      />
+                    </View>
+                    <Text style={s.nutNote}>{nutritionPanel.estimate.note}</Text>
+                    {nutritionPanel.attribution ? (
+                      <Text style={s.nutAttrib}>
+                        Source: {nutritionPanel.attribution}
+                        {item.nutrition?.nutriScore
+                          ? ` · Nutri-Score ${item.nutrition.nutriScore.toUpperCase()}`
+                          : ""}
+                      </Text>
+                    ) : null}
+                  </>
+                )}
               </View>
             )}
 
@@ -461,6 +504,12 @@ const s = StyleSheet.create({
     color: D.inkMid,
     lineHeight: 16,
     marginBottom: 6,
+  },
+  nutAttrib: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 10,
+    color: D.inkLight,
+    marginTop: 4,
   },
   // Insight card
   insightCard: {

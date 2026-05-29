@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   Platform,
   Pressable,
@@ -11,100 +11,85 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CategoryIcon } from "@/components/CategoryIcon";
 import { boldTheme as D } from "@/constants/colors";
 import { usePantry } from "@/contexts/PantryContext";
-import { useColors } from "@/hooks/useColors";
-import { buildInsightModel, type InsightBarMetric } from "@/lib/insightRules";
-import type { Category } from "@/lib/types";
+import {
+  computeScanRhythm,
+  computeSummary,
+  getCategoryBreakdown,
+  getMostPredictable,
+  getNutritionLabelCoverage,
+  getPredictedRestocks,
+  getTopItems,
+  groupPredictedRestocks,
+} from "@/lib/insights";
+import { getFamilyIntervalStats } from "@/lib/personalIntervals";
+import { getCategoryTone } from "@/lib/categories";
 
-const MIN_SCANS = 3;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function scoreLabel(score: number) {
-  if (score >= 75) return "Great basket";
-  if (score >= 55) return "Balanced";
-  return "Needs work";
+function dueLabel(days: number): string {
+  if (days <= 0) return "Now";
+  if (days === 1) return "~1 day";
+  return `~${days} days`;
 }
 
-function scoreSub(score: number) {
-  if (score >= 75) return "High variety, good fresh coverage this week.";
-  if (score >= 55) return "Good balance. A bit more produce would help.";
-  return "Low variety detected. Add more fresh and whole foods.";
+function categoryEmoji(cat: string): string {
+  const map: Record<string, string> = {
+    Fruit: "🍎",
+    Vegetables: "🥦",
+    Dairy: "🥛",
+    Meat: "🥩",
+    Pantry: "🫙",
+    Bakery: "🍞",
+    Beverages: "🧃",
+    Frozen: "🧊",
+    Snacks: "🍿",
+    Household: "🧹",
+    "Personal Care": "🧴",
+    Prepared: "🥡",
+    Other: "📦",
+  };
+  return map[cat] ?? "📦";
 }
-
-function barStatusLabel(metric: InsightBarMetric): string {
-  const v = metric.invert ? 100 - metric.value : metric.value;
-  if (v >= 65) return "High ✓";
-  if (v >= 40) return "Good ✓";
-  if (v >= 20) return "OK";
-  return metric.invert ? "Good ✓" : "Low";
-}
-
-function barStatusColor(metric: InsightBarMetric): string {
-  const v = metric.invert ? 100 - metric.value : metric.value;
-  if (v >= 65) return "#2D7A3A";
-  if (v >= 40) return "#2D7A3A";
-  if (v >= 20) return D.inkMid;
-  return metric.invert ? "#2D7A3A" : "#B85C00";
-}
-
-function spotlightText(category: Category) {
-  if (category === "Fruit" || category === "Vegetables")
-    return "High in fibre and micronutrients. Great for daily balance.";
-  if (category === "Meat")
-    return "Complete protein. High in B12, iron, and zinc.";
-  if (category === "Dairy")
-    return "Solid protein source for satiety and recovery.";
-  if (category === "Prepared")
-    return "Convenient choice. Pair with produce to improve balance.";
-  if (category === "Bakery")
-    return "Choose whole grain options for more fibre and slower energy.";
-  return "Useful pantry staple when paired with whole foods.";
-}
-
-// Sample model used for the locked preview so new users see compelling content
-const PREVIEW_MODEL = {
-  score: 72,
-  scoreDelta: 8,
-  freshDelta: 14,
-  preparedDelta: -5,
-  organicShare: 0,
-  organicDelta: 0,
-  bars: [
-    { key: "whole_foods", label: "Whole foods",       value: 70, invert: false },
-    { key: "protein",     label: "Protein sources",   value: 55, invert: false },
-    { key: "fiber",       label: "Fiber-friendly",    value: 48, invert: false },
-    { key: "convenience", label: "Convenience foods", value: 22, invert: true  },
-  ] as InsightBarMetric[],
-  benefits: ["Calcium", "Protein", "Whole grains", "Fibre", "Vitamin C"],
-  spotlight: [
-    { id: "p1", name: "Eggs",   category: "Dairy"      as Category },
-    { id: "p2", name: "Spinach", category: "Vegetables" as Category },
-  ],
-  action: "Add more leafy greens or fruit to boost your fibre score this week.",
-  confidence: { label: "High confidence", note: "" },
-};
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function InsightsScreen() {
-  const colors = useColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { pantry, scans } = usePantry();
+  const { pantry, scans, predictionCtx } = usePantry();
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 0 : insets.top;
 
-  const hasEnoughData = scans.length >= MIN_SCANS;
-
-  const liveModel = useMemo(
-    () => (hasEnoughData ? buildInsightModel(pantry, scans) : null),
-    [pantry, scans, hasEnoughData],
+  const summary = useMemo(
+    () => computeSummary(pantry, scans),
+    [pantry, scans],
   );
-
-  const model = liveModel ?? PREVIEW_MODEL;
+  const scanRhythm = useMemo(() => computeScanRhythm(scans), [scans]);
+  const topItems = useMemo(() => getTopItems(pantry, 5), [pantry]);
+  const familyRhythms = useMemo(
+    () => getFamilyIntervalStats(pantry).slice(0, 4),
+    [pantry],
+  );
+  const categoryBreakdown = useMemo(
+    () => getCategoryBreakdown(pantry.filter((p) => !p.consumed)),
+    [pantry],
+  );
+  const groupedRestocks = useMemo(() => {
+    const restocks = getPredictedRestocks(
+      pantry.filter((p) => !p.consumed),
+      14,
+      predictionCtx,
+    );
+    return groupPredictedRestocks(restocks);
+  }, [pantry, predictionCtx]);
+  const predictable = useMemo(
+    () => getMostPredictable(pantry, 4),
+    [pantry],
+  );
+  const nutritionCoverage = useMemo(
+    () => getNutritionLabelCoverage(pantry),
+    [pantry],
+  );
 
   const wasteStats = useMemo(() => {
     const cutoff = Date.now() - 30 * 86400000;
@@ -114,10 +99,19 @@ export default function InsightsScreen() {
     return { wastedCount: wasted.length, wastedItems: wasted.slice(0, 3) };
   }, [pantry]);
 
-  // Top item for PRO upsell headline
-  const topItemName = pantry
-    .filter((p) => !p.consumed)
-    .sort((a, b) => (b.purchaseCount ?? 1) - (a.purchaseCount ?? 1))[0]?.name ?? "your items";
+  const activeCount = pantry.filter((p) => !p.consumed).length;
+  const hasData = scans.length > 0 || activeCount > 0;
+
+  const changeIcon =
+    summary.weeklyChange > 0
+      ? "trending-up"
+      : summary.weeklyChange < 0
+        ? "trending-down"
+        : "minus";
+  const changeText =
+    summary.weeklyChange === 0
+      ? "Same as last week"
+      : `${summary.weeklyChange > 0 ? "+" : ""}${summary.weeklyChange}% vs last week`;
 
   return (
     <ScrollView
@@ -125,217 +119,330 @@ export default function InsightsScreen() {
       contentContainerStyle={{ paddingBottom: insets.bottom + 120 }}
       showsVerticalScrollIndicator={false}
     >
-      {/* ── Header band ── */}
       <View style={[s.header, { paddingTop: topPad + 20 }]}>
-        <Text style={s.headerEyebrow}>YOUR HEALTH</Text>
-        <View style={s.headerRow}>
-          <Text style={s.headerTitle}>INSIGHTS.</Text>
-          <View style={s.freeBadge}>
-            <Text style={s.freeBadgeTxt}>FREE</Text>
-          </View>
-        </View>
-        <Text style={s.headerSub}>Based on items in your pantry</Text>
+        <Text style={s.headerEyebrow}>FROM YOUR SCANS</Text>
+        <Text style={s.headerTitle}>Insights</Text>
+        <Text style={s.headerSub}>
+          Shopping rhythms, restock timing, and pantry mix
+        </Text>
       </View>
 
-      {/* ── Content area (preview + optional overlay) ── */}
-      <View style={s.contentWrap}>
-        {/* Always-rendered content — dimmed when locked */}
-        <View
-          // @ts-ignore — pointerEvents as prop is valid in RN
-          pointerEvents={hasEnoughData ? "auto" : "none"}
-          style={{ opacity: hasEnoughData ? 1 : 0.13 }}
-        >
-          <InsightsContent
-            model={model}
-            wasteStats={wasteStats}
-            topItemName={topItemName}
-            colors={colors}
-          />
-        </View>
+      <View style={s.body}>
+        {!hasData ? (
+          <View style={s.emptyCard}>
+            <Feather name="bar-chart-2" size={28} color={D.greenMid} />
+            <Text style={s.emptyTitle}>No patterns yet</Text>
+            <Text style={s.emptySub}>
+              Scan a receipt and we&apos;ll show how often you shop, what you
+              buy most, and what may need restocking soon.
+            </Text>
+            <Pressable
+              style={({ pressed }) => [
+                s.emptyBtn,
+                { opacity: pressed ? 0.9 : 1 },
+              ]}
+              onPress={() => router.push("/(tabs)/scan")}
+            >
+              <Feather name="camera" size={15} color={D.cream} />
+              <Text style={s.emptyBtnTxt}>Scan a receipt</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={s.rhythmCard}>
+              <Text style={s.cardEyebrow}>SHOPPING RHYTHM</Text>
+              <Text style={s.rhythmLine}>{scanRhythm.rhythmLine}</Text>
+              <View style={s.rhythmStats}>
+                <RhythmStat
+                  label="This week"
+                  value={String(summary.itemsBoughtThisWeek)}
+                  sub="items bought"
+                />
+                <RhythmStat
+                  label="Scans"
+                  value={String(scanRhythm.totalScans)}
+                  sub="all time"
+                />
+                <RhythmStat
+                  label="Usual gap"
+                  value={
+                    summary.averageCadenceDays
+                      ? `${summary.averageCadenceDays}d`
+                      : "—"
+                  }
+                  sub="between rebuys"
+                />
+              </View>
+              {summary.itemsBoughtThisWeek > 0 ||
+              summary.itemsBoughtLastWeek > 0 ? (
+                <View style={s.deltaRow}>
+                  <Feather name={changeIcon} size={13} color={D.greenLight} />
+                  <Text style={s.deltaTxt}>{changeText}</Text>
+                </View>
+              ) : null}
+            </View>
 
-        {/* Lock overlay — only shown when not enough scans */}
-        {!hasEnoughData && (
-          <View style={s.lockOverlay}>
-            <View style={s.lockCard}>
-              <View style={[s.lockRing, { borderColor: D.greenMid }]}>
-                <Text style={[s.lockCount, { color: D.greenMid }]}>
-                  {scans.length}/{MIN_SCANS}
+            {groupedRestocks.length > 0 && (
+              <Section title="RESTOCK FORECAST" sub="Based on your usual timing">
+                <View style={{ gap: 8 }}>
+                  {groupedRestocks.map((group) => (
+                    <View key={group.id} style={s.rowCard}>
+                      <CategoryIcon category={group.category} size={32} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.rowTitle} numberOfLines={1}>
+                          {group.label}
+                        </Text>
+                        <Text style={s.rowMeta}>
+                          {group.category}
+                          {group.count > 1 ? ` · ${group.count} items` : ""}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          s.dueBadge,
+                          group.dueInDays <= 0 && s.dueBadgeUrgent,
+                        ]}
+                      >
+                        {dueLabel(group.dueInDays)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </Section>
+            )}
+
+            {familyRhythms.length > 0 && (
+              <Section
+                title="REPEAT CYCLES"
+                sub="How often you restock similar items"
+              >
+                <View style={s.listCard}>
+                  {familyRhythms.map((fam, i) => (
+                    <View
+                      key={fam.family}
+                      style={[s.listRow, i > 0 && s.listRowBorder]}
+                    >
+                      <Text style={s.listTitle}>{fam.family}</Text>
+                      <Text style={s.listValue}>
+                        ~{fam.medianDays}d
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </Section>
+            )}
+
+            {topItems.length > 0 && (
+              <Section title="MOST BOUGHT" sub="Staples in your kitchen">
+                <View style={s.listCard}>
+                  {topItems.map((item, i) => (
+                    <View
+                      key={item.id}
+                      style={[s.listRow, i > 0 && s.listRowBorder]}
+                    >
+                      <Text style={s.rank}>{i + 1}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.listTitle} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={s.rowMeta}>
+                          {item.category}
+                          {item.cadenceDays
+                            ? ` · every ~${item.cadenceDays}d`
+                            : ""}
+                        </Text>
+                      </View>
+                      <Text style={s.countPill}>{item.purchaseCount}×</Text>
+                    </View>
+                  ))}
+                </View>
+              </Section>
+            )}
+
+            {categoryBreakdown.length > 0 && (
+              <Section title="PANTRY MIX" sub="Active items by category">
+                <View style={s.listCard}>
+                  {categoryBreakdown.slice(0, 6).map((c, i) => (
+                    <View
+                      key={c.category}
+                      style={[s.catBlock, i > 0 && s.listRowBorder]}
+                    >
+                      <View style={s.catHead}>
+                        <Text style={s.catEmoji}>
+                          {categoryEmoji(c.category)}
+                        </Text>
+                        <Text style={s.listTitle}>{c.category}</Text>
+                        <Text style={s.catCount}>{c.count}</Text>
+                      </View>
+                      <View style={s.barTrack}>
+                        <View
+                          style={[
+                            s.barFill,
+                            {
+                              width: `${Math.max(
+                                6,
+                                Math.round(
+                                  (c.count /
+                                    (categoryBreakdown[0]?.count ?? 1)) *
+                                    100,
+                                ),
+                              )}%`,
+                              backgroundColor: getCategoryTone(c.category),
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </Section>
+            )}
+
+            {predictable.length > 0 && (
+              <Section title="LIKE CLOCKWORK" sub="Very consistent rebuys">
+                <View style={{ gap: 8 }}>
+                  {predictable.map((item) => (
+                    <View key={item.id} style={s.rowCard}>
+                      <CategoryIcon category={item.category} size={32} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={s.rowTitle} numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={s.rowMeta}>
+                          Every ~{item.cadenceDays} days
+                        </Text>
+                      </View>
+                      <View style={s.consistencyPill}>
+                        <Feather name="zap" size={11} color={D.greenMid} />
+                        <Text style={s.consistencyTxt}>
+                          {item.consistency}%
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </Section>
+            )}
+
+            {nutritionCoverage.total > 0 && (
+              <Section title="NUTRITION LABELS" sub="Items with real label data">
+                <View style={s.nutCard}>
+                  <Text style={s.nutBig}>
+                    {nutritionCoverage.labeled}
+                    <Text style={s.nutBigMuted}>
+                      {" "}
+                      / {nutritionCoverage.total}
+                    </Text>
+                  </Text>
+                  <Text style={s.nutSub}>
+                    {nutritionCoverage.labeled === 0
+                      ? "Open item details after scanning to fetch USDA or Open Food Facts data."
+                      : "Label-backed nutrition from scans and item lookups. Estimates used when no label is found."}
+                  </Text>
+                </View>
+              </Section>
+            )}
+
+            <View
+              style={[
+                s.wasteCard,
+                wasteStats.wastedCount > 0 && s.wasteCardAlert,
+              ]}
+            >
+              <View style={s.wasteHead}>
+                <Feather
+                  name="trash-2"
+                  size={13}
+                  color={wasteStats.wastedCount > 0 ? "#c0392b" : D.inkLight}
+                />
+                <Text
+                  style={[
+                    s.wasteTitle,
+                    wasteStats.wastedCount > 0 && { color: "#c0392b" },
+                  ]}
+                >
+                  Food waste · last 30 days
+                </Text>
+                <Text
+                  style={[
+                    s.wasteCount,
+                    wasteStats.wastedCount > 0 && { color: "#c0392b" },
+                  ]}
+                >
+                  {wasteStats.wastedCount}
                 </Text>
               </View>
-              <Text style={s.lockTitle}>
-                {MIN_SCANS - scans.length} more scan{MIN_SCANS - scans.length === 1 ? "" : "s"} to unlock
-              </Text>
-              <Text style={s.lockSub}>
-                Insights builds a picture of your eating habits from real shopping history. Scan {MIN_SCANS} receipts to unlock.
-              </Text>
-              <Pressable
-                style={s.lockBtn}
-                onPress={() => router.push("/(tabs)/scan")}
-              >
-                <Feather name="camera" size={15} color={D.cream} />
-                <Text style={s.lockBtnTxt}>Scan a receipt</Text>
-              </Pressable>
+              {wasteStats.wastedCount === 0 ? (
+                <Text style={s.wasteNone}>
+                  Nothing marked wasted. Use &quot;It was wasted&quot; on a
+                  pantry item if you toss it.
+                </Text>
+              ) : (
+                wasteStats.wastedItems.map((w) => (
+                  <Text key={w.id} style={s.wasteItem}>
+                    · {w.name}
+                  </Text>
+                ))
+              )}
             </View>
-          </View>
+
+            <Pressable
+              style={({ pressed }) => [
+                s.activityLink,
+                { opacity: pressed ? 0.88 : 1 },
+              ]}
+              onPress={() => router.push("/activity")}
+            >
+              <Text style={s.activityLinkTxt}>Full activity timeline →</Text>
+            </Pressable>
+
+            <Text style={s.disclaimer}>
+              Patterns come from your scan history — not medical advice.
+            </Text>
+          </>
         )}
       </View>
     </ScrollView>
   );
 }
 
-// ─── InsightsContent ──────────────────────────────────────────────────────────
-
-function InsightsContent({
-  model,
-  wasteStats,
-  topItemName,
-  colors,
+function Section({
+  title,
+  sub,
+  children,
 }: {
-  model: typeof PREVIEW_MODEL;
-  wasteStats: { wastedCount: number; wastedItems: Array<{ id: string; name: string }> };
-  topItemName: string;
-  colors: ReturnType<typeof useColors>;
+  title: string;
+  sub?: string;
+  children: ReactNode;
 }) {
   return (
-    <View style={s.content}>
-      {/* ── Score card ── */}
-      <View style={s.scoreCard}>
-        <Text style={s.scoreSectionLabel}>THIS WEEK'S BASKET SCORE</Text>
-        <View style={s.scoreBody}>
-          <View style={s.scoreRingWrap}>
-            <View style={s.scoreRing}>
-              <Text style={s.scoreNum}>{model.score}</Text>
-            </View>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.scoreLabel}>{scoreLabel(model.score)}</Text>
-            <Text style={s.scoreSubTxt}>{scoreSub(model.score)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* ── Nutrition snapshot ── */}
-      <Text style={s.sectionLabel}>NUTRITION SNAPSHOT</Text>
-      <View style={[s.card, { gap: 10 }]}>
-        {model.bars.map((metric) => (
-          <View key={metric.key} style={s.barRow}>
-            <Text style={s.barLabel}>{metric.label}</Text>
-            <View style={s.barTrack}>
-              <View
-                style={[
-                  s.barFill,
-                  {
-                    width: `${Math.max(4, Math.min(100, Math.round(metric.value)))}%`,
-                    backgroundColor: metric.invert ? D.amber : D.greenMid,
-                  },
-                ]}
-              />
-            </View>
-            <Text style={[s.barStatus, { color: barStatusColor(metric) }]}>
-              {barStatusLabel(metric)}
-            </Text>
-          </View>
-        ))}
-      </View>
-
-      {/* ── Benefits ── */}
-      <Text style={s.sectionLabel}>BENEFITS IN YOUR PANTRY</Text>
-      <View style={s.chips}>
-        {model.benefits.map((chip) => (
-          <View key={chip} style={s.chip}>
-            <Text style={s.chipTxt}>{chip.toUpperCase()}</Text>
-          </View>
-        ))}
-      </View>
-
-      {/* ── Item spotlight ── */}
-      {model.spotlight.length > 0 && (
-        <>
-          <Text style={s.sectionLabel}>ITEM SPOTLIGHT</Text>
-          <View style={{ gap: 8 }}>
-            {model.spotlight.map((sp) => (
-              <View key={sp.id} style={s.spotlightCard}>
-                <View style={s.spotlightHead}>
-                  <Text style={s.spotlightName}>{sp.name}</Text>
-                  <Text style={s.spotlightCat}>{sp.category.toUpperCase()}</Text>
-                </View>
-                <Text style={s.spotlightBody}>{spotlightText(sp.category)}</Text>
-              </View>
-            ))}
-          </View>
-        </>
-      )}
-
-      {/* ── Food waste ── */}
-      <View style={[s.wasteCard, wasteStats.wastedCount > 0 && s.wasteCardAlert]}>
-        <View style={s.wasteHead}>
-          <Feather
-            name="trash-2"
-            size={13}
-            color={wasteStats.wastedCount > 0 ? "#c0392b" : D.inkLight}
-          />
-          <Text style={[s.wasteTitleTxt, wasteStats.wastedCount > 0 && { color: "#c0392b" }]}>
-            Food waste · last 30 days
-          </Text>
-          <Text style={[s.wasteCountTxt, wasteStats.wastedCount > 0 && { color: "#c0392b" }]}>
-            {wasteStats.wastedCount} item{wasteStats.wastedCount === 1 ? "" : "s"}
-          </Text>
-        </View>
-        {wasteStats.wastedCount === 0 ? (
-          <Text style={s.wasteNone}>
-            No waste recorded. Tap "It Was Wasted" on any pantry item to track it.
-          </Text>
-        ) : (
-          wasteStats.wastedItems.map((w) => (
-            <Text key={w.id} style={s.wasteItemTxt}>· {w.name}</Text>
-          ))
-        )}
-      </View>
-
-      {/* ── Improve this week ── */}
-      <View style={s.actionCard}>
-        <Text style={s.actionLabel}>IMPROVE THIS WEEK</Text>
-        <Text style={s.actionBody}>{model.action}</Text>
-      </View>
-
-      {/* ── PRO feature upsell ── */}
-      <View style={s.proCard}>
-        <Text style={s.proLabel}>PRO FEATURE</Text>
-        <Text style={s.proTitle}>
-          You bought {topItemName} — here's what to make.
-        </Text>
-        <Text style={s.proBody}>
-          Get personalised recipes based on exactly what's in your pantry right now.
-        </Text>
-        <Pressable style={s.proBtn}>
-          <Text style={s.proBtnTxt}>UNLOCK PRO  →</Text>
-        </Pressable>
-      </View>
-
-      {/* ── Shopping journey (Pro teaser) ── */}
-      <View style={s.journeyCard}>
-        <Text style={s.journeyLabel}>PRO · COMING SOON</Text>
-        <Text style={s.journeyTitle}>Your shopping journey</Text>
-        <Text style={s.journeyBody}>
-          A timeline of scans, restocks, what you finished vs. wasted, and how your basket evolves week to week — all in one story you can actually learn from.
-        </Text>
-        <View style={s.journeyLockRow}>
-          <Feather name="lock" size={14} color={D.inkLight} />
-          <Text style={s.journeyLockTxt}>Included with Pro</Text>
-        </View>
-      </View>
-
-      <Text style={s.disclaimer}>
-        Directional estimates from pantry category data, not medical advice.
-      </Text>
+    <View style={s.section}>
+      <Text style={s.sectionTitle}>{title}</Text>
+      {sub ? <Text style={s.sectionSub}>{sub}</Text> : null}
+      {children}
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function RhythmStat({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <View style={s.rhythmStat}>
+      <Text style={s.rhythmStatLabel}>{label}</Text>
+      <Text style={s.rhythmStatValue}>{value}</Text>
+      <Text style={s.rhythmStatSub}>{sub}</Text>
+    </View>
+  );
+}
 
 const s = StyleSheet.create({
-  // Header band
   header: {
     backgroundColor: D.greenMid,
     paddingHorizontal: 22,
@@ -349,284 +456,285 @@ const s = StyleSheet.create({
     textTransform: "uppercase",
     marginBottom: 6,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 4,
-  },
   headerTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 30,
     color: D.cream,
     letterSpacing: -0.5,
-  },
-  freeBadge: {
-    backgroundColor: "rgba(168,201,127,0.25)",
-    borderWidth: 1,
-    borderColor: "rgba(168,201,127,0.4)",
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  freeBadgeTxt: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 10,
-    color: D.greenLight,
-    letterSpacing: 1,
+    marginBottom: 4,
   },
   headerSub: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
-    color: "rgba(197,220,168,0.75)",
+    color: "rgba(197,220,168,0.85)",
+    lineHeight: 18,
   },
-
-  // Content + lock overlay
-  contentWrap: {
-    position: "relative",
-  },
-  content: {
+  body: {
     paddingHorizontal: 18,
     paddingTop: 18,
-    gap: 0,
   },
-  lockOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "flex-start",
+  emptyCard: {
     alignItems: "center",
-    paddingTop: 40,
-    paddingHorizontal: 20,
-  },
-  lockCard: {
-    width: "100%",
-    backgroundColor: D.cream,
-    borderRadius: 18,
+    backgroundColor: D.creamDark,
     borderWidth: 1,
     borderColor: D.creamBorder,
+    borderRadius: 14,
     padding: 24,
-    alignItems: "center",
     gap: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 6,
   },
-  lockRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    borderWidth: 3,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  lockCount: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 20,
-  },
-  lockTitle: {
+  emptyTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 18,
     color: D.inkBlack,
-    textAlign: "center",
   },
-  lockSub: {
+  emptySub: {
     fontFamily: "Inter_400Regular",
     fontSize: 13,
     color: D.inkMid,
     textAlign: "center",
     lineHeight: 19,
   },
-  lockBtn: {
+  emptyBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     backgroundColor: D.greenMid,
-    paddingVertical: 13,
-    paddingHorizontal: 28,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
     borderRadius: 999,
     marginTop: 6,
   },
-  lockBtnTxt: {
+  emptyBtnTxt: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
     color: D.cream,
   },
-
-  // Score card (dark green)
-  scoreCard: {
+  rhythmCard: {
     backgroundColor: D.greenMid,
     borderRadius: 14,
     padding: 16,
     marginBottom: 22,
   },
-  scoreSectionLabel: {
+  cardEyebrow: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 9,
     letterSpacing: 1.5,
     color: "rgba(168,201,127,0.7)",
     textTransform: "uppercase",
-    marginBottom: 12,
+    marginBottom: 8,
   },
-  scoreBody: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  scoreRingWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scoreRing: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    borderWidth: 3,
-    borderColor: D.greenLight,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(0,0,0,0.15)",
-  },
-  scoreNum: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 26,
+  rhythmLine: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 15,
     color: D.cream,
+    lineHeight: 21,
+    marginBottom: 14,
   },
-  scoreLabel: {
+  rhythmStats: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  rhythmStat: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.12)",
+    borderRadius: 10,
+    padding: 10,
+  },
+  rhythmStatLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 8,
+    letterSpacing: 1,
+    color: "rgba(168,201,127,0.65)",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  },
+  rhythmStatValue: {
     fontFamily: "Inter_700Bold",
     fontSize: 20,
     color: D.cream,
-    letterSpacing: -0.3,
-    marginBottom: 4,
   },
-  scoreSubTxt: {
+  rhythmStatSub: {
     fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: "rgba(197,220,168,0.8)",
-    lineHeight: 17,
+    fontSize: 10,
+    color: "rgba(197,220,168,0.75)",
+    marginTop: 2,
   },
-
-  // Section label
-  sectionLabel: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 9,
-    letterSpacing: 1.5,
-    color: D.inkLight,
-    textTransform: "uppercase",
-    marginBottom: 10,
-    marginTop: 4,
-  },
-
-  // Card wrapper
-  card: {
-    backgroundColor: D.creamDark,
-    borderWidth: 1,
-    borderColor: D.creamBorder,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 20,
-  },
-
-  // Bars
-  barRow: {
+  deltaRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(168,201,127,0.25)",
   },
-  barLabel: {
+  deltaTxt: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
-    color: D.inkBlack,
-    width: 110,
+    color: D.greenLight,
   },
-  barTrack: {
-    flex: 1,
-    height: 7,
-    backgroundColor: D.creamBorder,
-    borderRadius: 4,
-    overflow: "hidden",
+  section: {
+    marginBottom: 22,
   },
-  barFill: {
-    height: "100%",
-    borderRadius: 4,
-  },
-  barStatus: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 10,
-    width: 52,
-    textAlign: "right",
-  },
-
-  // Benefit chips
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 7,
-    marginBottom: 20,
-  },
-  chip: {
-    backgroundColor: D.creamDark,
-    borderWidth: 1,
-    borderColor: D.creamBorder,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-  },
-  chipTxt: {
+  sectionTitle: {
     fontFamily: "Inter_700Bold",
-    fontSize: 10,
-    color: D.greenMid,
-    letterSpacing: 0.5,
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.inkMid,
+    textTransform: "uppercase",
+    marginBottom: 4,
   },
-
-  // Spotlight
-  spotlightCard: {
+  sectionSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.inkLight,
+    marginBottom: 10,
+  },
+  rowCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     backgroundColor: D.creamDark,
     borderWidth: 1,
     borderColor: D.creamBorder,
     borderRadius: 12,
     padding: 12,
-    marginBottom: 8,
   },
-  spotlightHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 5,
-  },
-  spotlightName: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 15,
+  rowTitle: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
     color: D.inkBlack,
   },
-  spotlightCat: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 9,
-    letterSpacing: 0.8,
-    color: D.inkLight,
-  },
-  spotlightBody: {
+  rowMeta: {
     fontFamily: "Inter_400Regular",
+    fontSize: 11,
+    color: D.inkLight,
+    marginTop: 2,
+  },
+  dueBadge: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+    color: D.greenMid,
+    letterSpacing: 0.3,
+  },
+  dueBadgeUrgent: {
+    color: D.amber,
+  },
+  listCard: {
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  listRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: D.creamBorder,
+  },
+  listTitle: {
+    flex: 1,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: D.inkBlack,
+  },
+  listValue: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    color: D.greenMid,
+  },
+  rank: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 13,
+    color: D.greenMid,
+    width: 18,
+  },
+  countPill: {
+    fontFamily: "Inter_700Bold",
     fontSize: 12,
     color: D.greenMid,
+  },
+  catBlock: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  catHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  catEmoji: {
+    fontSize: 16,
+    width: 22,
+    textAlign: "center",
+  },
+  catCount: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 13,
+    color: D.inkMid,
+  },
+  barTrack: {
+    height: 7,
+    backgroundColor: D.cream,
+    borderRadius: 4,
+    overflow: "hidden",
+    marginLeft: 30,
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 4,
+  },
+  consistencyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(58,92,38,0.1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  consistencyTxt: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 11,
+    color: D.greenMid,
+  },
+  nutCard: {
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 12,
+    padding: 14,
+  },
+  nutBig: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 28,
+    color: D.inkBlack,
+    marginBottom: 6,
+  },
+  nutBigMuted: {
+    fontSize: 16,
+    color: D.inkLight,
+  },
+  nutSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: D.inkMid,
     lineHeight: 17,
   },
-
-  // Waste card
   wasteCard: {
     backgroundColor: D.creamDark,
     borderWidth: 1,
     borderColor: D.creamBorder,
     borderRadius: 12,
     padding: 12,
-    gap: 4,
-    marginBottom: 20,
-    marginTop: 12,
+    marginBottom: 16,
   },
   wasteCardAlert: {
     backgroundColor: "#fff0ee",
@@ -638,13 +746,13 @@ const s = StyleSheet.create({
     gap: 6,
     marginBottom: 4,
   },
-  wasteTitleTxt: {
+  wasteTitle: {
     flex: 1,
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
     color: D.inkMid,
   },
-  wasteCountTxt: {
+  wasteCount: {
     fontFamily: "Inter_700Bold",
     fontSize: 13,
     color: D.inkMid,
@@ -655,119 +763,21 @@ const s = StyleSheet.create({
     color: D.inkLight,
     lineHeight: 17,
   },
-  wasteItemTxt: {
+  wasteItem: {
     fontFamily: "Inter_500Medium",
     fontSize: 12,
     color: "#c0392b",
   },
-
-  // Improve this week
-  actionCard: {
-    backgroundColor: `${D.greenMid}14`,
-    borderWidth: 1,
-    borderColor: `${D.greenMid}30`,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 20,
-  },
-  actionLabel: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 9,
-    letterSpacing: 1.5,
-    color: D.greenMid,
-    textTransform: "uppercase",
-    marginBottom: 4,
-  },
-  actionBody: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 13,
-    color: D.inkBlack,
-    lineHeight: 19,
-  },
-
-  // PRO upsell
-  proCard: {
-    borderWidth: 1.5,
-    borderColor: D.creamBorder,
-    borderStyle: "dashed",
-    borderRadius: 14,
-    padding: 16,
-    gap: 6,
-    marginBottom: 20,
-  },
-  proLabel: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 9,
-    letterSpacing: 1.5,
-    color: D.inkLight,
-    textTransform: "uppercase",
-  },
-  proTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    color: D.inkBlack,
-    lineHeight: 22,
-  },
-  proBody: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: D.inkMid,
-    lineHeight: 17,
-  },
-  proBtn: {
-    alignSelf: "flex-start",
-    backgroundColor: D.greenMid,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginTop: 4,
-  },
-  proBtnTxt: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 11,
-    color: D.cream,
-    letterSpacing: 1,
-  },
-
-  journeyCard: {
-    borderWidth: 1,
-    borderColor: D.creamBorder,
-    borderRadius: 14,
-    padding: 16,
-    gap: 6,
-    marginBottom: 20,
-    backgroundColor: `${D.greenMid}08`,
-  },
-  journeyLabel: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 9,
-    letterSpacing: 1.5,
-    color: D.inkLight,
-    textTransform: "uppercase",
-  },
-  journeyTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 16,
-    color: D.inkBlack,
-  },
-  journeyBody: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 12,
-    color: D.inkMid,
-    lineHeight: 18,
-  },
-  journeyLockRow: {
-    flexDirection: "row",
+  activityLink: {
     alignItems: "center",
-    gap: 6,
-    marginTop: 6,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
-  journeyLockTxt: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 11,
-    color: D.inkLight,
+  activityLinkTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.greenMid,
   },
-
   disclaimer: {
     fontFamily: "Inter_400Regular",
     fontSize: 11,

@@ -49,6 +49,29 @@ export interface ConsumptionRecord {
 
 export type BulkStockLevel = "full" | "low" | "empty";
 
+export interface MacroNutrients {
+  caloriesKcal: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+  fiberG: number | null;
+}
+
+export type NutritionSource = "open_food_facts" | "usda_fdc" | "estimate";
+
+export interface NutritionSnapshot {
+  source: NutritionSource;
+  productName?: string;
+  barcode?: string;
+  fdcId?: number;
+  per100g?: MacroNutrients;
+  perServing?: MacroNutrients;
+  servingDescription?: string;
+  nutriScore?: string;
+  note: string;
+  fetchedAt: string;
+}
+
 export interface PantryItem {
   id: string;
   name: string;
@@ -72,6 +95,8 @@ export interface PantryItem {
   consumptionHistory?: ConsumptionRecord[];
   /** Bulk staples (rice, flour): simple stock override. */
   stockLevel?: BulkStockLevel;
+  barcode?: string;
+  nutrition?: NutritionSnapshot;
 }
 
 export interface ScanRecord {

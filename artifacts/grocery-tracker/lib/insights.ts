@@ -1,7 +1,10 @@
 import {
   computeAverageDaysBetweenPurchases,
   daysBetween,
+  isReasonableCadence,
   predictNextNeededDate,
+  purchaseRebuyGaps,
+  type PredictionContext,
 } from "./predictions";
 import type { Category, PantryItem, ScanRecord } from "./types";
 
@@ -103,6 +106,13 @@ export function computeSummary(
   };
 }
 
+function rebuyCadenceDays(item: PantryItem): number | null {
+  const gap =
+    computeAverageDaysBetweenPurchases(item.purchases) ??
+    item.averageDaysBetweenPurchases;
+  return isReasonableCadence(gap) ? gap : null;
+}
+
 export function getTopItems(pantry: PantryItem[], limit = 5): TopItem[] {
   return pantry
     .map((p) => ({
@@ -110,7 +120,7 @@ export function getTopItems(pantry: PantryItem[], limit = 5): TopItem[] {
       name: p.name,
       category: p.category,
       purchaseCount: p.purchases.length,
-      cadenceDays: p.averageDaysBetweenPurchases,
+      cadenceDays: rebuyCadenceDays(p),
     }))
     .filter((p) => p.purchaseCount > 0)
     .sort((a, b) => b.purchaseCount - a.purchaseCount)
@@ -134,13 +144,133 @@ export function getCategoryBreakdown(
     .sort((a, b) => b.count - a.count);
 }
 
+export interface ScanRhythm {
+  totalScans: number;
+  avgDaysBetween: number | null;
+  lastScanDaysAgo: number | null;
+  rhythmLine: string;
+}
+
+export function computeScanRhythm(scans: ScanRecord[]): ScanRhythm {
+  const sorted = [...scans].sort(
+    (a, b) => new Date(b.scannedAt).getTime() - new Date(a.scannedAt).getTime(),
+  );
+  const totalScans = sorted.length;
+  if (totalScans === 0) {
+    return {
+      totalScans: 0,
+      avgDaysBetween: null,
+      lastScanDaysAgo: null,
+      rhythmLine: "Scan a receipt to learn how often you shop.",
+    };
+  }
+
+  const lastScanDaysAgo = Math.floor(
+    (Date.now() - new Date(sorted[0]!.scannedAt).getTime()) / DAY_MS,
+  );
+  const gaps: number[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const gap = daysBetween(sorted[i + 1]!.scannedAt, sorted[i]!.scannedAt);
+    if (gap > 0) gaps.push(gap);
+  }
+  const avgDaysBetween =
+    gaps.length > 0
+      ? Math.round(gaps.reduce((sum, g) => sum + g, 0) / gaps.length)
+      : null;
+
+  let rhythmLine: string;
+  if (avgDaysBetween != null && avgDaysBetween <= 10) {
+    rhythmLine = `You shop about every ${avgDaysBetween} day${avgDaysBetween === 1 ? "" : "s"} on average.`;
+  } else if (avgDaysBetween != null) {
+    rhythmLine = `You usually restock every ~${avgDaysBetween} days.`;
+  } else if (lastScanDaysAgo === 0) {
+    rhythmLine = "Last shop was today.";
+  } else {
+    rhythmLine = `Last shop was ${lastScanDaysAgo} day${lastScanDaysAgo === 1 ? "" : "s"} ago.`;
+  }
+
+  return { totalScans, avgDaysBetween, lastScanDaysAgo, rhythmLine };
+}
+
+export function getNutritionLabelCoverage(pantry: PantryItem[]): {
+  total: number;
+  labeled: number;
+} {
+  const active = pantry.filter(
+    (p) =>
+      !p.consumed &&
+      p.category !== "Household" &&
+      p.category !== "Personal Care",
+  );
+  const labeled = active.filter(
+    (p) =>
+      p.nutrition &&
+      p.nutrition.source !== "estimate" &&
+      (p.nutrition.perServing || p.nutrition.per100g),
+  ).length;
+  return { total: active.length, labeled };
+}
+
+function inferFamilyLabel(name: string): string | null {
+  const lower = name.toLowerCase();
+  if (
+    lower.includes("salad") ||
+    lower.includes("coleslaw") ||
+    lower.includes("slaw")
+  ) {
+    return "Salads";
+  }
+  if (lower.includes("milk")) return "Milk";
+  if (lower.includes("bread") || lower.includes("pita")) return "Bread";
+  return null;
+}
+
+export type GroupedRestock = {
+  id: string;
+  label: string;
+  category: Category;
+  count: number;
+  dueInDays: number;
+};
+
+export function groupPredictedRestocks(
+  restocks: PredictedRestock[],
+): GroupedRestock[] {
+  const groups = new Map<string, GroupedRestock>();
+
+  for (const item of restocks) {
+    const family = inferFamilyLabel(item.name);
+    const key = `${item.category}:${family ?? item.name}`;
+    const label = family ?? item.name;
+    const existing = groups.get(key);
+
+    if (!existing) {
+      groups.set(key, {
+        id: key,
+        label,
+        category: item.category,
+        count: 1,
+        dueInDays: item.dueInDays,
+      });
+      continue;
+    }
+
+    existing.count += 1;
+    existing.dueInDays = Math.min(existing.dueInDays, item.dueInDays);
+  }
+
+  return [...groups.values()].sort((a, b) => a.dueInDays - b.dueInDays);
+}
+
 export function getPredictedRestocks(
   pantry: PantryItem[],
   withinDays = 14,
+  ctx: PredictionContext = {},
 ): PredictedRestock[] {
   return pantry
+    .filter((p) => !p.consumed)
     .map((item) => {
-      const date = predictNextNeededDate(item);
+      const date = predictNextNeededDate(item, ctx);
       const dueInDays = daysBetween(new Date(), date);
       return {
         id: item.id,
@@ -166,15 +296,12 @@ export function getMostPredictable(
     const sorted = [...item.purchases].sort(
       (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
-    const gaps: number[] = [];
-    for (let i = 1; i < sorted.length; i++) {
-      const gap = daysBetween(sorted[i - 1].date, sorted[i].date);
-      if (gap > 0) gaps.push(gap);
-    }
+    const gaps = purchaseRebuyGaps(item.purchases);
     if (gaps.length < 2) continue;
     const mean =
       computeAverageDaysBetweenPurchases(item.purchases) ??
       gaps.reduce((s, g) => s + g, 0) / gaps.length;
+    if (!isReasonableCadence(mean)) continue;
     const variance =
       gaps.reduce((acc, g) => acc + Math.pow(g - mean, 2), 0) / gaps.length;
     const stdDev = Math.sqrt(variance);

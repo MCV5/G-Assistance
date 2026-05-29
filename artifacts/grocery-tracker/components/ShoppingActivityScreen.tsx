@@ -21,13 +21,14 @@ import {
   getMostPredictable,
   getPredictedRestocks,
   getTopItems,
+  groupPredictedRestocks,
 } from "@/lib/insights";
 
 /** Shopping rhythm, restocks, and category breakdown (formerly the Insights tab). */
 export function ShoppingActivityScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { pantry, scans } = usePantry();
+  const { pantry, scans, predictionCtx } = usePantry();
 
   const summary = useMemo(
     () => computeSummary(pantry, scans),
@@ -38,8 +39,14 @@ export function ShoppingActivityScreen() {
     () => getCategoryBreakdown(pantry),
     [pantry],
   );
-  const restocks = useMemo(() => getPredictedRestocks(pantry), [pantry]);
-  const groupedRestocks = useMemo(() => groupRestocks(restocks), [restocks]);
+  const restocks = useMemo(
+    () => getPredictedRestocks(pantry, 14, predictionCtx),
+    [pantry, predictionCtx],
+  );
+  const groupedRestocks = useMemo(
+    () => groupPredictedRestocks(restocks),
+    [restocks],
+  );
   const predictable = useMemo(() => getMostPredictable(pantry), [pantry]);
 
   const isWeb = Platform.OS === "web";
@@ -149,17 +156,17 @@ export function ShoppingActivityScreen() {
         <MiniStat
           label="Learned"
           value={String(summary.itemsWithCadence)}
-          caption="cadence detected"
+          caption="rebuy pattern"
           icon="activity"
         />
         <MiniStat
-          label="Cadence"
+          label="Usual gap"
           value={
             summary.averageCadenceDays
               ? `${summary.averageCadenceDays}d`
               : "—"
           }
-          caption="avg gap"
+          caption="between rebuys"
           icon="repeat"
         />
       </View>
@@ -394,56 +401,6 @@ export function ShoppingActivityScreen() {
       )}
     </ScrollView>
   );
-}
-
-function inferFamilyLabel(name: string): string | null {
-  const lower = name.toLowerCase();
-  if (
-    lower.includes("salad") ||
-    lower.includes("coleslaw") ||
-    lower.includes("slaw")
-  ) {
-    return "Salads";
-  }
-  if (lower.includes("milk")) return "Milk";
-  if (lower.includes("bread") || lower.includes("pita")) return "Bread";
-  return null;
-}
-
-function groupRestocks(restocks: ReturnType<typeof getPredictedRestocks>) {
-  const groups = new Map<
-    string,
-    {
-      id: string;
-      label: string;
-      category: (typeof restocks)[number]["category"];
-      count: number;
-      dueInDays: number;
-    }
-  >();
-
-  for (const item of restocks) {
-    const family = inferFamilyLabel(item.name);
-    const key = `${item.category}:${family ?? item.name}`;
-    const label = family ?? item.name;
-    const existing = groups.get(key);
-
-    if (!existing) {
-      groups.set(key, {
-        id: key,
-        label,
-        category: item.category,
-        count: 1,
-        dueInDays: item.dueInDays,
-      });
-      continue;
-    }
-
-    existing.count += 1;
-    existing.dueInDays = Math.min(existing.dueInDays, item.dueInDays);
-  }
-
-  return [...groups.values()].sort((a, b) => a.dueInDays - b.dueInDays);
 }
 
 function MiniStat({

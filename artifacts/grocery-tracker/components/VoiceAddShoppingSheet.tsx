@@ -1,10 +1,12 @@
 import { Feather } from "@expo/vector-icons";
-import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from "expo-speech-recognition";
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -18,7 +20,9 @@ import {
 } from "react-native";
 
 import { CategoryIcon } from "@/components/CategoryIcon";
+import type { VoiceAddSpeechBridgeRef } from "@/lib/voiceAddSpeechTypes";
 import { useColors } from "@/hooks/useColors";
+import { canUseNativeSpeech } from "@/lib/canUseNativeSpeech";
 import { guessCategory } from "@/lib/guessCategory";
 import { parseShoppingListText } from "@/lib/shoppingListApi";
 import type { Category } from "@/lib/types";
@@ -30,6 +34,14 @@ type ReviewItem = {
 };
 
 type Step = "capture" | "review";
+
+type SpeechBridgeComponent = ComponentType<{
+  ref?: React.Ref<VoiceAddSpeechBridgeRef>;
+  onTranscript: (text: string, isFinal: boolean) => void;
+  onListeningChange: (listening: boolean) => void;
+  onError: (message: string) => void;
+  onAvailability: (available: boolean) => void;
+}>;
 
 interface Props {
   visible: boolean;
@@ -43,6 +55,10 @@ export function VoiceAddShoppingSheet({
   onAddItems,
 }: Props) {
   const colors = useColors();
+  const speechRef = useRef<VoiceAddSpeechBridgeRef>(null);
+  const [SpeechBridge, setSpeechBridge] = useState<SpeechBridgeComponent | null>(
+    null,
+  );
   const [step, setStep] = useState<Step>("capture");
   const [text, setText] = useState("");
   const [listening, setListening] = useState(false);
@@ -51,40 +67,34 @@ export function VoiceAddShoppingSheet({
   const [speechAvailable, setSpeechAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useSpeechRecognitionEvent("result", (event) => {
-    const transcript = event.results?.[0]?.transcript?.trim();
-    if (!transcript) return;
+  useEffect(() => {
+    if (!visible) return;
+    if (!canUseNativeSpeech()) {
+      setSpeechAvailable(false);
+      return;
+    }
+    let cancelled = false;
+    void import("@/components/VoiceAddSpeechBridge")
+      .then((mod) => {
+        if (!cancelled) setSpeechBridge(() => mod.VoiceAddSpeechBridge);
+      })
+      .catch(() => {
+        if (!cancelled) setSpeechAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible]);
+
+  const handleTranscript = useCallback((transcript: string, isFinal: boolean) => {
     setText((prev) => {
-      if (event.isFinal) {
+      if (isFinal) {
         const base = prev.trim();
         return base ? `${base} ${transcript}` : transcript;
       }
       return transcript;
     });
-  });
-
-  useSpeechRecognitionEvent("error", (event) => {
-    setListening(false);
-    if (event.error !== "aborted" && event.error !== "no-speech") {
-      setError("Could not hear that. Try again or type your list.");
-    }
-  });
-
-  useSpeechRecognitionEvent("end", () => {
-    setListening(false);
-  });
-
-  useEffect(() => {
-    if (!visible) return;
-    void (async () => {
-      try {
-        const available = ExpoSpeechRecognitionModule.isRecognitionAvailable();
-        setSpeechAvailable(available);
-      } catch {
-        setSpeechAvailable(false);
-      }
-    })();
-  }, [visible]);
+  }, []);
 
   const reset = useCallback(() => {
     setStep("capture");
@@ -93,11 +103,7 @@ export function VoiceAddShoppingSheet({
     setParsing(false);
     setReviewItems([]);
     setError(null);
-    try {
-      ExpoSpeechRecognitionModule.stop();
-    } catch {
-      /* noop */
-    }
+    speechRef.current?.stop();
   }, []);
 
   const handleClose = useCallback(() => {
@@ -107,33 +113,14 @@ export function VoiceAddShoppingSheet({
 
   const startListening = useCallback(async () => {
     setError(null);
-    try {
-      const perm = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!perm.granted) {
-        setError("Microphone permission is needed to capture your list.");
-        return;
-      }
-      setListening(true);
-      ExpoSpeechRecognitionModule.start({
-        lang: "en-US",
-        interimResults: true,
-        continuous: true,
-      });
-      if (Platform.OS !== "web") {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-    } catch {
-      setError("Voice input is not available on this device. Type your list instead.");
-      setListening(false);
+    const started = await speechRef.current?.start();
+    if (started && Platform.OS !== "web") {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   }, []);
 
   const stopListening = useCallback(() => {
-    try {
-      ExpoSpeechRecognitionModule.stop();
-    } catch {
-      /* noop */
-    }
+    speechRef.current?.stop();
     setListening(false);
   }, []);
 
@@ -179,6 +166,8 @@ export function VoiceAddShoppingSheet({
     handleClose();
   }, [handleClose, onAddItems, reviewItems]);
 
+  const showMic = speechAvailable && SpeechBridge;
+
   return (
     <Modal
       visible={visible}
@@ -186,6 +175,16 @@ export function VoiceAddShoppingSheet({
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
+      {SpeechBridge ? (
+        <SpeechBridge
+          ref={speechRef}
+          onTranscript={handleTranscript}
+          onListeningChange={setListening}
+          onError={setError}
+          onAvailability={setSpeechAvailable}
+        />
+      ) : null}
+
       <View style={[s.sheet, { backgroundColor: colors.background }]}>
         <View style={s.header}>
           <Text style={[s.title, { color: colors.foreground }]}>
@@ -199,34 +198,49 @@ export function VoiceAddShoppingSheet({
         {step === "capture" ? (
           <>
             <Text style={[s.sub, { color: colors.mutedForeground }]}>
-              Say everything you want — cookie butter, milk, chili lime chips —
-              and we&apos;ll add it to your shopping list.
+              {showMic
+                ? "Say everything you want — cookie butter, milk, chili lime chips — and we'll add it to your shopping list."
+                : "Type your list below — cookie butter, milk, chili lime chips — and we'll add it to your shopping list."}
             </Text>
 
-            <Pressable
-              onPress={listening ? stopListening : startListening}
-              disabled={!speechAvailable && Platform.OS !== "web"}
-              style={[
-                s.micBtn,
-                {
-                  backgroundColor: listening ? colors.destructive : colors.primary,
-                  opacity: speechAvailable || Platform.OS === "web" ? 1 : 0.5,
-                },
-              ]}
-            >
-              <Feather
-                name={listening ? "square" : "mic"}
-                size={28}
-                color={colors.primaryForeground}
-              />
-              <Text style={[s.micLabel, { color: colors.primaryForeground }]}>
-                {listening ? "Stop listening" : "Tap and speak"}
+            {showMic ? (
+              <Pressable
+                onPress={listening ? stopListening : startListening}
+                style={[
+                  s.micBtn,
+                  {
+                    backgroundColor: listening ? colors.destructive : colors.primary,
+                  },
+                ]}
+              >
+                <Feather
+                  name={listening ? "square" : "mic"}
+                  size={28}
+                  color={colors.primaryForeground}
+                />
+                <Text style={[s.micLabel, { color: colors.primaryForeground }]}>
+                  {listening ? "Stop listening" : "Tap and speak"}
+                </Text>
+              </Pressable>
+            ) : (
+              <View
+                style={[
+                  s.micHint,
+                  { backgroundColor: colors.card, borderColor: colors.border },
+                ]}
+              >
+                <Feather name="info" size={16} color={colors.mutedForeground} />
+                <Text style={[s.micHintText, { color: colors.mutedForeground }]}>
+                  Voice needs a dev build on your phone. Typing works everywhere.
+                </Text>
+              </View>
+            )}
+
+            {showMic ? (
+              <Text style={[s.or, { color: colors.mutedForeground }]}>
+                or type / edit below
               </Text>
-            </Pressable>
-
-            <Text style={[s.or, { color: colors.mutedForeground }]}>
-              or type / edit below
-            </Text>
+            ) : null}
 
             <TextInput
               value={text}
@@ -381,6 +395,21 @@ const s = StyleSheet.create({
   micLabel: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
+  },
+  micHint: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  micHintText: {
+    flex: 1,
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    lineHeight: 18,
   },
   or: {
     fontFamily: "Inter_500Medium",

@@ -6,7 +6,7 @@ export const TRADER_JOES_STORE_FINDER_ZIP = "19103";
 
 export const TRADER_JOES_LINKS = {
   whatsNew: "https://www.traderjoes.com/home/products/new",
-  fearlessFlyer: "https://www.traderjoes.com/home/fearless-flyer",
+  fearlessFlyer: "https://www.traderjoes.com/home/ff",
   storeFinder: `https://www.traderjoes.com/home/store-search?zip=${TRADER_JOES_STORE_FINDER_ZIP}`,
 } as const;
 

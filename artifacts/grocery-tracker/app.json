@@ -15,11 +15,16 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.goalcery.app"
+      "bundleIdentifier": "com.goalcery.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Goalcery uses the microphone so you can speak your shopping list.",
+        "NSSpeechRecognitionUsageDescription": "Goalcery uses speech recognition to turn what you say into shopping list items."
+      }
     },
     "android": {
       "package": "com.goalcery.app",
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "permissions": ["RECORD_AUDIO"]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -37,6 +42,13 @@
         "expo-camera",
         {
           "cameraPermission": "Allow Goalcery to use the camera to scan barcodes."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Goalcery uses the microphone so you can speak your shopping list.",
+          "speechRecognitionPermission": "Goalcery uses speech recognition to turn what you say into shopping list items."
         }
       ]
     ],

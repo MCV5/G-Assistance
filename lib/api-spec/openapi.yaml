@@ -340,6 +340,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NutritionConfigResponse'
+  /shopping/parse-list:
+    post:
+      tags: [shopping]
+      operationId: postShoppingParseList
+      summary: Parse spoken or typed text into shopping list item names
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationSessionHeader'
+        - $ref: '#/components/parameters/SessionCookie'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShoppingListParseRequest'
+      responses:
+        '200':
+          description: Parsed shopping items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShoppingListParseResponse'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
   /me/behavior-insight:
     post:
       tags: [store]
@@ -774,6 +807,30 @@ components:
           type: boolean
         openFoodFacts:
           type: boolean
+    ShoppingListParseRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+          minLength: 2
+          maxLength: 2000
+    ShoppingListParseItem:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+    ShoppingListParseResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShoppingListParseItem'
     BehaviorMeta:
       type: object
       properties:

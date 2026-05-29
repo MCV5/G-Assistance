@@ -18,6 +18,7 @@ import { CategoryIcon } from "@/components/CategoryIcon";
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { SwipeRemoveAction } from "@/components/SwipeActions";
+import { VoiceAddShoppingSheet } from "@/components/VoiceAddShoppingSheet";
 import { usePantry } from "@/contexts/PantryContext";
 import { useColors } from "@/hooks/useColors";
 import { type ShoppingListItem } from "@/lib/types";
@@ -28,11 +29,13 @@ export default function ShoppingScreen() {
   const {
     shoppingList,
     addManualShoppingItem,
+    addManualShoppingItems,
     toggleShoppingItem,
     removeShoppingItem,
     clearCheckedShoppingItems,
   } = usePantry();
   const [addOpen, setAddOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const isWeb = Platform.OS === "web";
   const topPad = isWeb ? 67 : insets.top + 12;
@@ -60,19 +63,34 @@ export default function ShoppingScreen() {
                   Suggested restocks and items you add — one list, no duplicates.
                 </Text>
               </View>
-              <Pressable
-                onPress={() => setAddOpen(true)}
-                style={[
-                  styles.addBtn,
-                  { backgroundColor: colors.primary },
-                ]}
-              >
-                <Feather
-                  name="plus"
-                  size={20}
-                  color={colors.primaryForeground}
-                />
-              </Pressable>
+              <View style={styles.headerActions}>
+                <Pressable
+                  onPress={() => setVoiceOpen(true)}
+                  style={[
+                    styles.iconBtn,
+                    {
+                      backgroundColor: colors.card,
+                      borderColor: colors.border,
+                      borderWidth: 1,
+                    },
+                  ]}
+                >
+                  <Feather name="mic" size={20} color={colors.foreground} />
+                </Pressable>
+                <Pressable
+                  onPress={() => setAddOpen(true)}
+                  style={[
+                    styles.iconBtn,
+                    { backgroundColor: colors.primary, borderWidth: 0 },
+                  ]}
+                >
+                  <Feather
+                    name="plus"
+                    size={20}
+                    color={colors.primaryForeground}
+                  />
+                </Pressable>
+              </View>
             </View>
             {checkedCount > 0 && (
               <Pressable
@@ -123,7 +141,7 @@ export default function ShoppingScreen() {
           <EmptyState
             icon="shopping-cart"
             title="Nothing to buy yet"
-            subtitle="When pantry items run low, we'll suggest them here. Tap + to add anything else."
+            subtitle="When pantry items run low, we'll suggest them here. Tap + or the mic to add anything else."
           >
             <PrimaryButton
               label="Add an item"
@@ -143,6 +161,12 @@ export default function ShoppingScreen() {
           addManualShoppingItem(name, category);
           setAddOpen(false);
         }}
+      />
+
+      <VoiceAddShoppingSheet
+        visible={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onAddItems={addManualShoppingItems}
       />
     </View>
   );
@@ -256,7 +280,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 4,
   },
-  addBtn: {
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,

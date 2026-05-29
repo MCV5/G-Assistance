@@ -66,6 +66,9 @@ interface PantryContextValue {
   refreshPredictions: () => Promise<void>;
   addManualPantryItem: (name: string, category: Category) => Promise<void>;
   addManualShoppingItem: (name: string, category: Category) => Promise<void>;
+  addManualShoppingItems: (
+    items: { name: string; category: Category }[],
+  ) => Promise<void>;
   toggleShoppingItem: (id: string) => Promise<void>;
   removeShoppingItem: (id: string) => Promise<void>;
   clearCheckedShoppingItems: () => Promise<void>;
@@ -649,6 +652,39 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     [pantry, persistShopping, shoppingList, predictionCtx],
   );
 
+  const addManualShoppingItems = useCallback(
+    async (items: { name: string; category: Category }[]) => {
+      const existingKeys = new Set(
+        shoppingList.map((s) => shoppingDedupeKey(s.name, s.category)),
+      );
+      const toAdd: ShoppingListItem[] = [];
+      for (const { name, category } of items) {
+        const trimmed = name.trim();
+        if (trimmed.length < 2) continue;
+        const key = shoppingDedupeKey(trimmed, category);
+        if (existingKeys.has(key)) continue;
+        existingKeys.add(key);
+        toAdd.push({
+          id: newId(),
+          name: trimmed,
+          category,
+          reason: "manual",
+          checked: false,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      if (toAdd.length === 0) return;
+      await persistShopping(
+        rebuildPredictedShoppingList(
+          pantry,
+          [...shoppingList, ...toAdd],
+          predictionCtx,
+        ),
+      );
+    },
+    [pantry, persistShopping, shoppingList, predictionCtx],
+  );
+
   const toggleShoppingItem = useCallback(
     async (id: string) => {
       const next = shoppingList.map((s) =>
@@ -712,6 +748,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       refreshPredictions,
       addManualPantryItem,
       addManualShoppingItem,
+      addManualShoppingItems,
       toggleShoppingItem,
       removeShoppingItem,
       clearCheckedShoppingItems,
@@ -738,6 +775,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       refreshPredictions,
       addManualPantryItem,
       addManualShoppingItem,
+      addManualShoppingItems,
       toggleShoppingItem,
       removeShoppingItem,
       clearCheckedShoppingItems,

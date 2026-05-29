@@ -192,16 +192,22 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       try {
         const data = await loadStore();
         if (!active) return;
+        const pantryWithCadence = data.pantry.map((item) => ({
+          ...item,
+          averageDaysBetweenPurchases: computeAverageDaysBetweenPurchases(
+            item.purchases,
+          ),
+        }));
         const ctx = makePredictionContext(
-          data.pantry,
+          pantryWithCadence,
           data.behaviorMeta.mutedFamilies,
         );
         const refreshed = rebuildPredictedShoppingList(
-          data.pantry,
+          pantryWithCadence,
           data.shoppingList,
           ctx,
         );
-        setPantry(data.pantry);
+        setPantry(pantryWithCadence);
         setScans(data.scans);
         setBehaviorMeta(data.behaviorMeta);
         setShoppingList(refreshed);

@@ -2,6 +2,7 @@
 
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useMemo } from "react";
 import {
   Platform,
@@ -27,6 +28,11 @@ import {
   STALE_SCAN_DAYS,
 } from "@/lib/pantryStaleness";
 import { urgencyLabel } from "@/lib/predictions";
+import {
+  buildTraderJoesHomeCard,
+  TRADER_JOES_LINKS,
+  TRADER_JOES_REGION,
+} from "@/lib/traderJoesTrip";
 import type { BehaviorCard, PantryItem, ScanRecord } from "@/lib/types";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -181,6 +187,11 @@ export default function HomeScreen() {
   }, [pantry, scans, behaviorMeta.cards, predictionCtx]);
 
   const lastScan = scans[0];
+
+  const traderJoesCard = useMemo(
+    () => buildTraderJoesHomeCard(scans, pantry),
+    [scans, pantry],
+  );
 
   const topPad = Platform.OS === "web" ? 0 : insets.top;
   const botPad = Platform.OS === "web" ? 110 : 110;
@@ -377,6 +388,10 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {traderJoesCard.show && !stale && (
+            <TraderJoesDiscoveryCard hint={traderJoesCard.hint} />
+          )}
+
           {(recentItems.length > 0 || lastScan) && pantry.length > 0 && (
             <LastShopRecap
               lastScan={lastScan}
@@ -452,6 +467,56 @@ export default function HomeScreen() {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function TraderJoesDiscoveryCard({ hint }: { hint: string }) {
+  const openLink = (url: string) => {
+    void WebBrowser.openBrowserAsync(url);
+  };
+
+  return (
+    <View style={s.section}>
+      <View style={s.sectionHead}>
+        <View style={s.sectionHeadLeft}>
+          <Feather name="compass" size={11} color={D.greenMid} />
+          <Text style={s.sectionTitle}>TRY SOMETHING NEW</Text>
+        </View>
+      </View>
+      <View style={s.tjCard}>
+        <Text style={s.tjTitle}>Trader Joe&apos;s · {TRADER_JOES_REGION}</Text>
+        <Text style={s.tjHint}>{hint}</Text>
+        <View style={s.tjActions}>
+          <Pressable
+            style={({ pressed }) => [
+              s.tjBtnPrimary,
+              { opacity: pressed ? 0.9 : 1 },
+            ]}
+            onPress={() => openLink(TRADER_JOES_LINKS.whatsNew)}
+          >
+            <Text style={s.tjBtnPrimaryTxt}>What&apos;s new</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [
+              s.tjBtnGhost,
+              { opacity: pressed ? 0.9 : 1 },
+            ]}
+            onPress={() => openLink(TRADER_JOES_LINKS.fearlessFlyer)}
+          >
+            <Text style={s.tjBtnGhostTxt}>Fearless Flyer</Text>
+          </Pressable>
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            s.tjStoreLink,
+            { opacity: pressed ? 0.85 : 1 },
+          ]}
+          onPress={() => openLink(TRADER_JOES_LINKS.storeFinder)}
+        >
+          <Text style={s.tjStoreLinkTxt}>Find stores near Philly →</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 function LastShopRecap({
   lastScan,
@@ -1040,6 +1105,65 @@ const s = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     fontSize: 12,
     color: D.greenMid,
+  },
+
+  tjCard: {
+    backgroundColor: "#F8FBF3",
+    borderWidth: 1,
+    borderColor: D.greenLight,
+    borderRadius: 12,
+    padding: 14,
+  },
+  tjTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 15,
+    color: D.greenMid,
+    marginBottom: 6,
+  },
+  tjHint: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: D.inkBlack,
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  tjActions: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  tjBtnPrimary: {
+    backgroundColor: D.greenMid,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  tjBtnPrimaryTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.cream,
+  },
+  tjBtnGhost: {
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: D.cream,
+  },
+  tjBtnGhostTxt: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
+    color: D.greenMid,
+  },
+  tjStoreLink: {
+    marginTop: 10,
+    alignSelf: "flex-start",
+  },
+  tjStoreLinkTxt: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    color: D.inkMid,
   },
 
   // Last shop recap

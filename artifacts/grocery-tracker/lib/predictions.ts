@@ -4,24 +4,42 @@ import type { ItemStatus, PantryItem, Purchase } from "./types";
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
+/** Gaps longer than this are treated as stale history, not a rebuy rhythm. */
+export const MAX_REBUY_GAP_DAYS = 120;
+
 export function daysBetween(a: string | Date, b: string | Date): number {
   const ad = typeof a === "string" ? new Date(a) : a;
   const bd = typeof b === "string" ? new Date(b) : b;
   return Math.round((bd.getTime() - ad.getTime()) / DAY_MS);
 }
 
-export function computeAverageDaysBetweenPurchases(
-  purchases: Purchase[],
-): number | null {
-  if (purchases.length < 2) return null;
+/** Days between consecutive purchases, excluding unrealistic long gaps. */
+export function purchaseRebuyGaps(purchases: Purchase[]): number[] {
+  if (purchases.length < 2) return [];
   const sorted = [...purchases].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
   );
   const gaps: number[] = [];
   for (let i = 1; i < sorted.length; i++) {
-    const gap = daysBetween(sorted[i - 1].date, sorted[i].date);
-    if (gap > 0) gaps.push(gap);
+    const gap = daysBetween(sorted[i - 1]!.date, sorted[i]!.date);
+    if (gap > 0 && gap <= MAX_REBUY_GAP_DAYS) gaps.push(gap);
   }
+  return gaps;
+}
+
+export function isReasonableCadence(days: number | null | undefined): days is number {
+  return (
+    days != null &&
+    Number.isFinite(days) &&
+    days >= 2 &&
+    days <= MAX_REBUY_GAP_DAYS
+  );
+}
+
+export function computeAverageDaysBetweenPurchases(
+  purchases: Purchase[],
+): number | null {
+  const gaps = purchaseRebuyGaps(purchases);
   if (gaps.length === 0) return null;
   const sum = gaps.reduce((acc, g) => acc + g, 0);
   return Math.round(sum / gaps.length);
@@ -51,7 +69,10 @@ export function getEffectiveCycleDays(
     item.name,
     item.estimatedShelfLifeDays,
   );
-  return item.averageDaysBetweenPurchases ?? shelf;
+  if (isReasonableCadence(item.averageDaysBetweenPurchases)) {
+    return item.averageDaysBetweenPurchases;
+  }
+  return shelf;
 }
 
 export function predictNextNeededDate(
@@ -124,8 +145,13 @@ export function urgencyLabel(
 }
 
 export function summarizeCadence(item: PantryItem): string {
-  if (item.averageDaysBetweenPurchases) {
-    const d = item.averageDaysBetweenPurchases;
+  const computed = computeAverageDaysBetweenPurchases(item.purchases);
+  const d = isReasonableCadence(computed)
+    ? computed
+    : isReasonableCadence(item.averageDaysBetweenPurchases)
+      ? item.averageDaysBetweenPurchases
+      : null;
+  if (d != null) {
     if (d <= 2) return "Bought every couple of days";
     if (d <= 9) return `Bought about every ${d} days`;
     if (d <= 16) return "Bought about weekly";

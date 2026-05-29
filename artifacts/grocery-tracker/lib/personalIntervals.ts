@@ -2,6 +2,8 @@ import { inferFamily } from "./itemInsights";
 import {
   computeAverageDaysBetweenPurchases,
   daysBetween,
+  isReasonableCadence,
+  MAX_REBUY_GAP_DAYS,
 } from "./predictions";
 import { resolveShelfLifeDays } from "./shelfLifeDefaults";
 import type { PantryItem } from "./types";
@@ -28,7 +30,7 @@ export function buildFamilyIntervalMap(
   const buckets = new Map<string, number[]>();
 
   const push = (family: string, days: number) => {
-    if (days <= 0 || days > 730) return;
+    if (!isReasonableCadence(days)) return;
     const key = family.trim();
     if (!key) return;
     const arr = buckets.get(key) ?? [];
@@ -52,7 +54,7 @@ export function buildFamilyIntervalMap(
       );
       for (let i = 1; i < sorted.length; i++) {
         const gap = daysBetween(sorted[i - 1]!.date, sorted[i]!.date);
-        if (gap > 0) push(family, gap);
+        if (gap > 0 && gap <= MAX_REBUY_GAP_DAYS) push(family, gap);
       }
     }
   }
@@ -105,7 +107,7 @@ export function getPersonalCycleDays(
     const medianDays = getFamilyMedianDays(family, pantry);
     if (medianDays && medianDays >= 2) return medianDays;
   }
-  if (item.averageDaysBetweenPurchases && item.averageDaysBetweenPurchases >= 2) {
+  if (isReasonableCadence(item.averageDaysBetweenPurchases)) {
     return item.averageDaysBetweenPurchases;
   }
   return resolveShelfLifeDays(

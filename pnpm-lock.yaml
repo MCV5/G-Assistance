@@ -264,6 +264,9 @@ importers:
       expo-sharing:
         specifier: ^55.0.18
         version: 55.0.18(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
+      expo-speech-recognition:
+        specifier: ^56.0.0
+        version: 56.0.0(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)
     devDependencies:
       '@babel/core':
         specifier: ^7.25.2
@@ -3630,6 +3633,13 @@ packages:
 
   expo-sharing@55.0.18:
     resolution: {integrity: sha512-Tqy4LXRLw/UEg5mT7BKhx8y4ReNz8fVldvhHJV5cesH3kRgEerHkYxVwid2vd7v34KnNp0RH1OqUyDlzZTQ9AQ==}
+    peerDependencies:
+      expo: '*'
+      react: '*'
+      react-native: '*'
+
+  expo-speech-recognition@56.0.0:
+    resolution: {integrity: sha512-spA6HqnA/rgwMNS5YmFktmzly7f46kGOv3tXZ2f0Xfh7x9pAsmXyG3YtPtB9sHGbW7RmUSjbMGEzsvCak2Q4sA==}
     peerDependencies:
       expo: '*'
       react: '*'
@@ -9618,6 +9628,12 @@ snapshots:
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
     transitivePeerDependencies:
       - supports-color
+
+  expo-speech-recognition@56.0.0(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0):
+    dependencies:
+      expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(expo-router@6.0.23)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0))(react@19.1.0)(typescript@5.9.3)
+      react: 19.1.0
+      react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(react@19.1.0)
 
   expo-splash-screen@31.0.13(expo@54.0.33)(typescript@5.9.3):
     dependencies:

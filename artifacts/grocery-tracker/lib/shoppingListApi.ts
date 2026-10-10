@@ -1,6 +1,7 @@
 import { customFetch } from "@workspace/api-client-react";
 
-import { coerceCategory, guessCategory } from "@/lib/guessCategory";
+import { coerceCategory } from "@/lib/guessCategory";
+import { parseShoppingListLocally as parseLocallyCore } from "@/lib/shoppingListLive";
 import type { Category } from "@/lib/types";
 
 export type ParsedShoppingListItem = {
@@ -30,24 +31,5 @@ export async function parseShoppingListText(
 }
 
 export function parseShoppingListLocally(text: string): ParsedShoppingListItem[] {
-  const cleaned = text
-    .replace(/\b(i need|get me|pick up|buy|grab|add)\b/gi, " ")
-    .replace(/\b(from trader joe'?s?|at trader joe'?s?|from tj'?s)\b/gi, " ")
-    .trim();
-
-  const chunks = cleaned
-    .split(/,|\n|;|\band\b|\bplus\b|\balso\b/gi)
-    .map((s) => s.replace(/^[\d]+\.?\s*/, "").trim())
-    .filter((s) => s.length >= 2);
-
-  const seen = new Set<string>();
-  const out: ParsedShoppingListItem[] = [];
-  for (const chunk of chunks) {
-    const name = chunk.replace(/\s+/g, " ").trim();
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ name, category: guessCategory(name) });
-  }
-  return out.slice(0, 30);
+  return parseLocallyCore(text).map(({ name, category }) => ({ name, category }));
 }

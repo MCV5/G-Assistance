@@ -6,13 +6,15 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useRef,
   useState,
 } from "react";
 
+import type { SpeechTranscriptUpdate } from "@/lib/shoppingListLive";
 import type { VoiceAddSpeechBridgeRef } from "@/lib/voiceAddSpeechTypes";
 
 interface Props {
-  onTranscript: (text: string, isFinal: boolean) => void;
+  onTranscriptUpdate: (update: SpeechTranscriptUpdate) => void;
   onListeningChange: (listening: boolean) => void;
   onError: (message: string) => void;
   onAvailability: (available: boolean) => void;
@@ -20,15 +22,33 @@ interface Props {
 
 export const VoiceAddSpeechBridge = forwardRef<VoiceAddSpeechBridgeRef, Props>(
   function VoiceAddSpeechBridge(
-    { onTranscript, onListeningChange, onError, onAvailability },
+    { onTranscriptUpdate, onListeningChange, onError, onAvailability },
     ref,
   ) {
     const [ready, setReady] = useState(false);
+    const committedRef = useRef("");
 
     useSpeechRecognitionEvent("result", (event) => {
-      const transcript = event.results?.[0]?.transcript?.trim();
-      if (!transcript) return;
-      onTranscript(transcript, event.isFinal);
+      const segment = event.results?.[0]?.transcript?.trim() ?? "";
+      if (!segment) return;
+
+      if (event.isFinal) {
+        committedRef.current = committedRef.current
+          ? `${committedRef.current} ${segment}`
+          : segment;
+        onTranscriptUpdate({
+          committed: committedRef.current,
+          interim: "",
+          isFinal: true,
+        });
+        return;
+      }
+
+      onTranscriptUpdate({
+        committed: committedRef.current,
+        interim: segment,
+        isFinal: false,
+      });
     });
 
     useSpeechRecognitionEvent("error", (event) => {
@@ -54,8 +74,9 @@ export const VoiceAddSpeechBridge = forwardRef<VoiceAddSpeechBridgeRef, Props>(
     }, [onAvailability]);
 
     useImperativeHandle(ref, () => ({
-      async start() {
+      async start(seedTranscript?: string) {
         if (!ready) return false;
+        committedRef.current = seedTranscript?.trim() ?? "";
         try {
           const perm =
             await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -67,6 +88,7 @@ export const VoiceAddSpeechBridge = forwardRef<VoiceAddSpeechBridgeRef, Props>(
             lang: "en-US",
             interimResults: true,
             continuous: true,
+            addsPunctuation: true,
           });
           onListeningChange(true);
           return true;

@@ -29,13 +29,27 @@ function normalizeCategory(raw: string): string {
 /** Rule-based fallback when Gemini is unavailable. */
 export function parseShoppingListLocally(text: string): ParsedShoppingItem[] {
   const cleaned = text
-    .replace(/\b(i need|get me|pick up|buy|grab|add)\b/gi, " ")
+    .replace(/\b(uh+|um+|like|you know)\b/gi, " ")
+    .replace(
+      /\b(i need|i want|we need|get me|pick up|pickup|buy|grab|add|please|can i get)\b/gi,
+      " ",
+    )
     .replace(/\b(from trader joe'?s?|at trader joe'?s?|from tj'?s)\b/gi, " ")
+    .replace(/\b(comma)\b/gi, ",")
+    .replace(/\s+/g, " ")
     .trim();
 
   const chunks = cleaned
-    .split(/,|\n|;|\band\b|\bplus\b|\balso\b/gi)
-    .map((s) => s.replace(/^[\d]+\.?\s*/, "").trim())
+    .split(
+      /[,;]|\n|\band then\b|\band also\b|\boh and\b|\bthen\b|\band\b|\bplus\b|\balso\b|\banother\b/gi,
+    )
+    .map((s) =>
+      s
+        .replace(/^[\d]+\.?\s*/, "")
+        .replace(/^(some|a couple of|a few|a|an|the)\s+/i, "")
+        .replace(/^some\s+/i, "")
+        .trim(),
+    )
     .filter((s) => s.length >= 2);
 
   const seen = new Set<string>();

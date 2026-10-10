@@ -24,7 +24,11 @@
     "android": {
       "package": "com.goalcery.app",
       "usesCleartextTraffic": true,
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/icon.png"
@@ -57,7 +61,11 @@
       "reactCompiler": true
     },
     "extra": {
-      "apiUrl": "https://g-assistance.onrender.com"
-    }
+      "apiUrl": "https://g-assistance.onrender.com",
+      "eas": {
+        "projectId": "3c7f95a6-4bfb-449d-a521-0568a58d70d9"
+      }
+    },
+    "owner": "manoharcv5"
   }
 }

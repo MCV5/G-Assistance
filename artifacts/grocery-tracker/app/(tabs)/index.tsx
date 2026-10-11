@@ -3,7 +3,7 @@
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { VoiceAddShoppingSheet } from "@/components/VoiceAddShoppingSheet";
 import { boldTheme as D } from "@/constants/colors";
 import { usePantry } from "@/contexts/PantryContext";
 import { useAuth } from "@/lib/auth";
@@ -84,8 +85,8 @@ function pantryStatusMessage(params: {
   }
   if (params.totalItems === 0) {
     return {
-      primary: "Nothing in your pantry yet",
-      secondary: "Scan a receipt to get started",
+      primary: "Ready when you are",
+      secondary: "Say what you need — or scan a receipt to start tracking",
     };
   }
   if (params.attentionCount > 0) {
@@ -112,13 +113,16 @@ export default function HomeScreen() {
   const {
     pantry,
     scans,
+    shoppingList,
     behaviorMeta,
     predictionCtx,
     confirmStillHave,
     confirmOut,
     addManualShoppingItem,
+    addManualShoppingItems,
     dismissBehaviorCard,
   } = usePantry();
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const {
     lowSignals,
@@ -188,6 +192,14 @@ export default function HomeScreen() {
 
   const lastScan = scans[0];
 
+  const listPreview = useMemo(() => {
+    const open = shoppingList.filter((s) => !s.checked);
+    return {
+      items: open.slice(0, 5),
+      total: open.length,
+    };
+  }, [shoppingList]);
+
   const traderJoesCard = useMemo(
     () => buildTraderJoesHomeCard(scans, pantry),
     [scans, pantry],
@@ -233,26 +245,123 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* ── Scan CTA — always visible, pinned below header ── */}
-      <Pressable
-        style={({ pressed }) => [s.scanCard, { opacity: pressed ? 0.9 : 1 }]}
-        onPress={() => router.push("/(tabs)/scan")}
-      >
-        <View style={s.scanIconWrap}>
-          <Feather name="camera" size={20} color={D.greenMid} />
+      {/* ── Trip hub: voice list + scan receipt ── */}
+      <View style={s.tripHub}>
+        <Pressable
+          style={({ pressed }) => [
+            s.tripPrimary,
+            { opacity: pressed ? 0.92 : 1 },
+          ]}
+          onPress={() => setVoiceOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Tell us what to buy"
+        >
+          <View style={s.tripMicRing}>
+            <Feather name="mic" size={26} color={D.cream} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.tripPrimaryTitle}>What&apos;s on the list?</Text>
+            <Text style={s.tripPrimarySub}>
+              Tap and speak — items appear as you go
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={D.greenLight} />
+        </Pressable>
+
+        <View style={s.tripRow}>
+          <Pressable
+            style={({ pressed }) => [
+              s.tripSecondary,
+              { opacity: pressed ? 0.9 : 1 },
+            ]}
+            onPress={() => router.push("/(tabs)/scan")}
+            accessibilityRole="button"
+            accessibilityLabel="Scan receipt"
+          >
+            <View style={s.tripSecIcon}>
+              <Feather name="camera" size={18} color={D.greenMid} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.tripSecTitle}>Scan receipt</Text>
+              <Text style={s.tripSecSub}>Just got back?</Text>
+            </View>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              s.tripSecondary,
+              { opacity: pressed ? 0.9 : 1 },
+            ]}
+            onPress={() => router.push("/(tabs)/shopping")}
+            accessibilityRole="button"
+            accessibilityLabel="Open shopping list"
+          >
+            <View style={s.tripSecIcon}>
+              <Feather name="shopping-cart" size={18} color={D.greenMid} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.tripSecTitle}>
+                {listPreview.total > 0
+                  ? `${listPreview.total} on list`
+                  : "Your list"}
+              </Text>
+              <Text style={s.tripSecSub}>
+                {listPreview.total > 0 ? "Open & check off" : "Empty for now"}
+              </Text>
+            </View>
+          </Pressable>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={s.scanTitle}>SCAN RECEIPT</Text>
-          <Text style={s.scanSub}>ADD ITEMS INSTANTLY</Text>
-        </View>
-        <Text style={s.scanArrow}>→</Text>
-      </Pressable>
+      </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: botPad }}
       >
         <View style={s.body}>
+          {/* Live shopping list preview */}
+          <Pressable
+            style={({ pressed }) => [
+              s.listPreview,
+              { opacity: pressed ? 0.92 : 1 },
+            ]}
+            onPress={() =>
+              listPreview.total > 0
+                ? router.push("/(tabs)/shopping")
+                : setVoiceOpen(true)
+            }
+          >
+            <View style={s.listPreviewHead}>
+              <Text style={s.listPreviewLabel}>YOUR LIST</Text>
+              <Text style={s.listPreviewAction}>
+                {listPreview.total > 0 ? "Open →" : "Add →"}
+              </Text>
+            </View>
+            {listPreview.total === 0 ? (
+              <Text style={s.listPreviewEmpty}>
+                Nothing yet. Tap the mic and say what you need.
+              </Text>
+            ) : (
+              <View style={{ gap: 6 }}>
+                {listPreview.items.map((item) => (
+                  <View key={item.id} style={s.listPreviewRow}>
+                    <View style={s.listPreviewDot} />
+                    <Text style={s.listPreviewName} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text style={s.listPreviewMeta} numberOfLines={1}>
+                      {item.reason === "manual" ? "You" : "Suggested"}
+                    </Text>
+                  </View>
+                ))}
+                {listPreview.total > listPreview.items.length ? (
+                  <Text style={s.listPreviewMore}>
+                    +{listPreview.total - listPreview.items.length} more
+                  </Text>
+                ) : null}
+              </View>
+            )}
+          </Pressable>
+
           {stale && (
             <View style={s.staleBanner}>
               <Text style={s.staleTitle}>It&apos;s been a while!</Text>
@@ -442,26 +551,32 @@ export default function HomeScreen() {
                 ))}
               </View>
 
-              <Text style={s.emptyTitle}>Scan to fill your pantry</Text>
+              <Text style={s.emptyTitle}>Start with your list</Text>
               <Text style={s.emptySub}>
-                Take a photo of any receipt, grocery bag, or cart. Every item is logged in seconds.
+                Say three things you need — then scan a receipt after the trip so we can track what you buy.
               </Text>
               <Pressable
                 style={({ pressed }) => [s.emptyBtn, { opacity: pressed ? 0.8 : 1 }]}
-                onPress={() => router.push("/(tabs)/scan")}
+                onPress={() => setVoiceOpen(true)}
               >
-                <Feather name="camera" size={16} color={D.cream} style={{ marginRight: 8 }} />
-                <Text style={s.emptyBtnTxt}>SCAN YOUR FIRST RECEIPT</Text>
+                <Feather name="mic" size={16} color={D.cream} style={{ marginRight: 8 }} />
+                <Text style={s.emptyBtnTxt}>TELL US WHAT TO BUY</Text>
               </Pressable>
 
-              <Text style={s.emptyOr}>or add items manually in</Text>
-              <Pressable onPress={() => router.push("/(tabs)/pantry")}>
-                <Text style={s.emptyLink}>Pantry →</Text>
+              <Text style={s.emptyOr}>or jump straight to</Text>
+              <Pressable onPress={() => router.push("/(tabs)/scan")}>
+                <Text style={s.emptyLink}>Scan a receipt →</Text>
               </Pressable>
             </View>
           )}
         </View>
       </ScrollView>
+
+      <VoiceAddShoppingSheet
+        visible={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        onAddItems={addManualShoppingItems}
+      />
     </View>
   );
 }
@@ -940,43 +1055,143 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Scan CTA — pinned between header and scroll
-  scanCard: {
+  // Trip hub — voice-first dual actions
+  tripHub: {
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 12,
+    backgroundColor: D.cream,
+    borderBottomWidth: 1,
+    borderBottomColor: D.creamBorder,
+    gap: 10,
+  },
+  tripPrimary: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    backgroundColor: "#EAF0E0",
-    borderBottomWidth: 1,
-    borderBottomColor: "#C5D6A8",
+    gap: 14,
+    backgroundColor: D.greenDark,
+    borderRadius: 18,
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 16,
   },
-  scanIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(45,80,22,0.12)",
+  tripMicRing: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(197,220,168,0.22)",
+    borderWidth: 1.5,
+    borderColor: "rgba(197,220,168,0.45)",
     alignItems: "center",
     justifyContent: "center",
   },
-  scanTitle: {
+  tripPrimaryTitle: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 17,
+    color: D.cream,
+    letterSpacing: -0.2,
+  },
+  tripPrimarySub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 12,
+    color: "rgba(242,239,230,0.72)",
+    marginTop: 3,
+    lineHeight: 16,
+  },
+  tripRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  tripSecondary: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  tripSecIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(45,74,30,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripSecTitle: {
     fontFamily: "Inter_700Bold",
     fontSize: 13,
     color: D.greenDark,
-    letterSpacing: 0.5,
   },
-  scanSub: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 9,
+  tripSecSub: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 11,
     color: D.inkMid,
-    letterSpacing: 1,
-    marginTop: 2,
-    textTransform: "uppercase",
+    marginTop: 1,
   },
-  scanArrow: {
+  listPreview: {
+    backgroundColor: D.creamDark,
+    borderWidth: 1,
+    borderColor: D.creamBorder,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    marginTop: 4,
+  },
+  listPreviewHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  listPreviewLabel: {
     fontFamily: "Inter_700Bold",
-    fontSize: 18,
+    fontSize: 9,
+    letterSpacing: 1.5,
+    color: D.inkMid,
+  },
+  listPreviewAction: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 12,
     color: D.greenMid,
+  },
+  listPreviewEmpty: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    color: D.inkMid,
+    lineHeight: 18,
+  },
+  listPreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  listPreviewDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: D.greenMid,
+  },
+  listPreviewName: {
+    flex: 1,
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 14,
+    color: D.inkBlack,
+  },
+  listPreviewMeta: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 11,
+    color: D.inkLight,
+  },
+  listPreviewMore: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
+    color: D.inkMid,
+    marginTop: 2,
+    paddingLeft: 16,
   },
 
   // Section

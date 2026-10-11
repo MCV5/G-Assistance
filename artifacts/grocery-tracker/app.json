@@ -23,9 +23,7 @@
     },
     "android": {
       "package": "com.goalcery.app",
-      "usesCleartextTraffic": true,
       "permissions": [
-        "RECORD_AUDIO",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]

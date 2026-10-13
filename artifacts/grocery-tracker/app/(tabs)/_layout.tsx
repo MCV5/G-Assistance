@@ -95,7 +95,7 @@ export default function TabLayout() {
           name="insights"
           options={{
             href: null,
-            title: "Insights",
+            title: "How you eat",
           }}
         />
       </Tabs>

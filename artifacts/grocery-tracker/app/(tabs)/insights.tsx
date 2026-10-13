@@ -132,10 +132,11 @@ export default function InsightsScreen() {
           <Feather name="chevron-left" size={20} color={D.cream} />
           <Text style={s.backText}>Back</Text>
         </Pressable>
-        <Text style={s.headerEyebrow}>FROM YOUR TRIPS</Text>
-        <Text style={s.headerTitle}>Patterns</Text>
+        <Text style={s.headerEyebrow}>FROM WHAT YOU BUY</Text>
+        <Text style={s.headerTitle}>How you eat</Text>
         <Text style={s.headerSub}>
-          How often you shop, what you buy, what may need restocking
+          A simple look at your habits — what shows up often, what&apos;s fresh,
+          and what may need restocking
         </Text>
       </View>
 
@@ -143,10 +144,10 @@ export default function InsightsScreen() {
         {!hasData ? (
           <View style={s.emptyCard}>
             <Feather name="bar-chart-2" size={28} color={D.greenMid} />
-            <Text style={s.emptyTitle}>No patterns yet</Text>
+            <Text style={s.emptyTitle}>No habits yet</Text>
             <Text style={s.emptySub}>
-              Scan a receipt and we&apos;ll show how often you shop, what you
-              buy most, and what may need restocking soon.
+              Scan a receipt after a trip and we&apos;ll sketch how you eat —
+              what you buy often, what&apos;s fresh, and what may run low.
             </Text>
             <Pressable
               style={({ pressed }) => [
@@ -409,7 +410,7 @@ export default function InsightsScreen() {
             </Pressable>
 
             <Text style={s.disclaimer}>
-              Patterns come from your scan history — not medical advice.
+              Based on what you buy — a habit sketch, not medical advice.
             </Text>
           </>
         )}

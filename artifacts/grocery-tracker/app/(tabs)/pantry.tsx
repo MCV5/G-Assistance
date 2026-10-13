@@ -292,11 +292,11 @@ export default function PantryScreen() {
               },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Weekly patterns"
+            accessibilityLabel="How you eat"
           >
             <Feather name="bar-chart-2" size={14} color={colors.primary} />
             <Text style={[styles.cueText, { color: colors.foreground }]}>
-              Patterns
+              How you eat
             </Text>
           </Pressable>
         </View>

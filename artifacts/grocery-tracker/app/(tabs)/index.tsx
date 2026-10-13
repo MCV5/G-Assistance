@@ -520,7 +520,7 @@ export default function HomeScreen() {
             >
               <Feather name="bar-chart-2" size={14} color={D.greenMid} />
               <Text style={s.insightsLinkTxt}>
-                See weekly patterns →
+                See how you eat →
               </Text>
             </Pressable>
           )}

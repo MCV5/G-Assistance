@@ -1,7 +1,5 @@
 import { BlurView } from "expo-blur";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
-import { Icon, Label, NativeTabs } from "expo-router/unstable-native-tabs";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React from "react";
@@ -9,38 +7,7 @@ import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 
 import { useColors } from "@/hooks/useColors";
 
-function NativeTabLayout() {
-  return (
-    <View style={{ flex: 1 }}>
-      <View style={{ flex: 1 }}>
-        <NativeTabs>
-          <NativeTabs.Trigger name="index">
-            <Icon sf={{ default: "house", selected: "house.fill" }} />
-            <Label>Home</Label>
-          </NativeTabs.Trigger>
-          <NativeTabs.Trigger name="pantry">
-            <Icon sf={{ default: "basket", selected: "basket.fill" }} />
-            <Label>Pantry</Label>
-          </NativeTabs.Trigger>
-          <NativeTabs.Trigger name="scan">
-            <Icon sf={{ default: "camera.viewfinder", selected: "camera.viewfinder" }} />
-            <Label>Scan</Label>
-          </NativeTabs.Trigger>
-          <NativeTabs.Trigger name="shopping">
-            <Icon sf={{ default: "cart", selected: "cart.fill" }} />
-            <Label>Shop</Label>
-          </NativeTabs.Trigger>
-          <NativeTabs.Trigger name="insights">
-            <Icon sf={{ default: "heart", selected: "heart.fill" }} />
-            <Label>Insights</Label>
-          </NativeTabs.Trigger>
-        </NativeTabs>
-      </View>
-    </View>
-  );
-}
-
-function ClassicTabLayout() {
+export default function TabLayout() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
@@ -93,33 +60,9 @@ function ClassicTabLayout() {
           }}
         />
         <Tabs.Screen
-          name="pantry"
-          options={{
-            title: "Pantry",
-            tabBarIcon: ({ color }) =>
-              isIOS ? (
-                <SymbolView name="basket" tintColor={color} size={24} />
-              ) : (
-                <Feather name="grid" size={22} color={color} />
-              ),
-          }}
-        />
-        <Tabs.Screen
-          name="scan"
-          options={{
-            title: "Scan",
-            tabBarIcon: ({ color }) =>
-              isIOS ? (
-                <SymbolView name="camera.viewfinder" tintColor={color} size={28} />
-              ) : (
-                <Feather name="camera" size={24} color={color} />
-              ),
-          }}
-        />
-        <Tabs.Screen
           name="shopping"
           options={{
-            title: "Shop",
+            title: "List",
             tabBarIcon: ({ color }) =>
               isIOS ? (
                 <SymbolView name="cart" tintColor={color} size={24} />
@@ -129,25 +72,33 @@ function ClassicTabLayout() {
           }}
         />
         <Tabs.Screen
-          name="insights"
+          name="pantry"
           options={{
-            title: "Insights",
+            title: "Kitchen",
             tabBarIcon: ({ color }) =>
               isIOS ? (
-                <SymbolView name="heart" tintColor={color} size={24} />
+                <SymbolView name="basket" tintColor={color} size={24} />
               ) : (
-                <Feather name="heart" size={22} color={color} />
+                <Feather name="grid" size={22} color={color} />
               ),
+          }}
+        />
+        {/* Reachable via Home / List CTAs — not primary destinations */}
+        <Tabs.Screen
+          name="scan"
+          options={{
+            href: null,
+            title: "Scan",
+          }}
+        />
+        <Tabs.Screen
+          name="insights"
+          options={{
+            href: null,
+            title: "Insights",
           }}
         />
       </Tabs>
     </View>
   );
-}
-
-export default function TabLayout() {
-  if (isLiquidGlassAvailable()) {
-    return <NativeTabLayout />;
-  }
-  return <ClassicTabLayout />;
 }

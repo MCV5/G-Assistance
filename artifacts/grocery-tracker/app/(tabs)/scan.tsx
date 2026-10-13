@@ -204,9 +204,25 @@ export default function ScanScreen() {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <Text style={[styles.title, { color: colors.foreground }]}>Scan</Text>
+      <Pressable
+        onPress={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace("/(tabs)");
+        }}
+        style={styles.backRow}
+        accessibilityRole="button"
+        accessibilityLabel="Go back"
+      >
+        <Feather name="chevron-left" size={20} color={colors.foreground} />
+        <Text style={[styles.backText, { color: colors.mutedForeground }]}>
+          Back
+        </Text>
+      </Pressable>
+      <Text style={[styles.title, { color: colors.foreground }]}>
+        Scan receipt
+      </Text>
       <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-        Snap a photo and we'll detect every item.
+        Just got back? Snap a photo and we&apos;ll update your kitchen.
       </Text>
 
       {/* ── Source type chips ── */}
@@ -279,7 +295,7 @@ export default function ScanScreen() {
           {analyze.isPending ? (
             <View
               style={[
-                StyleSheet.absoluteFillObject,
+                StyleSheet.absoluteFill,
                 styles.previewOverlay,
                 { backgroundColor: "rgba(0,0,0,0.55)" },
               ]}
@@ -389,6 +405,17 @@ export default function ScanScreen() {
 }
 
 const styles = StyleSheet.create({
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginBottom: 8,
+    alignSelf: "flex-start",
+  },
+  backText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+  },
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,

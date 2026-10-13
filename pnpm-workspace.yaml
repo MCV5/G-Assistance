@@ -55,10 +55,10 @@ catalog:
   drizzle-orm: ^0.45.2
   framer-motion: ^12.23.24
   lucide-react: ^0.545.0
-  # Must be this exact version because expo requires it
-  react: 19.1.0
-  # Must be this exact version because expo requires it
-  react-dom: 19.1.0
+  # Must be this exact version because Expo SDK 57 / RN 0.86 requires it
+  react: 19.2.3
+  # Must be this exact version because Expo SDK 57 / RN 0.86 requires it
+  react-dom: 19.2.3
   tailwind-merge: ^3.3.1
   tailwindcss: ^4.1.14
   tsx: ^4.21.0
@@ -74,6 +74,9 @@ onlyBuiltDependencies:
   - unrs-resolver
 
 overrides:
+  # Keep a single React across the monorepo (Expo SDK 57 / RN 0.86)
+  react: 19.2.3
+  react-dom: 19.2.3
   # replit uses linux-x64 only, we can exclude all other platforms
   "esbuild>@esbuild/darwin-arm64": "-"
   "esbuild>@esbuild/darwin-x64": "-"

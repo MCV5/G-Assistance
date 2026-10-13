@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useRef, useState } from "react";
 import {
   Alert,
@@ -57,10 +58,10 @@ export default function ShoppingScreen() {
             <View style={styles.headerRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.title, { color: colors.foreground }]}>
-                  Shopping list
+                  Your list
                 </Text>
                 <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                  Suggested restocks and items you add — one list, no duplicates.
+                  Speak or type what you need — check off at the store.
                 </Text>
               </View>
               <View style={styles.headerActions}>
@@ -92,6 +93,25 @@ export default function ShoppingScreen() {
                 </Pressable>
               </View>
             </View>
+            <Pressable
+              onPress={() => router.push("/(tabs)/scan")}
+              style={({ pressed }) => [
+                styles.scanCue,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.card,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel="Scan receipt after shopping"
+            >
+              <Feather name="camera" size={16} color={colors.primary} />
+              <Text style={[styles.scanCueText, { color: colors.foreground }]}>
+                Just shopped? Scan your receipt
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
             {checkedCount > 0 && (
               <Pressable
                 onPress={() => {
@@ -141,7 +161,7 @@ export default function ShoppingScreen() {
           <EmptyState
             icon="shopping-cart"
             title="Nothing to buy yet"
-            subtitle="When pantry items run low, we'll suggest them here. Tap + or the mic to add anything else."
+            subtitle="Tap the mic or + to add items. After the trip, scan a receipt so your kitchen stays up to date."
           >
             <PrimaryButton
               label="Add an item"
@@ -291,6 +311,21 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+  },
+  scanCue: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
+  scanCueText: {
+    flex: 1,
+    fontFamily: "Inter_500Medium",
+    fontSize: 13,
   },
   clearBtn: {
     flexDirection: "row",

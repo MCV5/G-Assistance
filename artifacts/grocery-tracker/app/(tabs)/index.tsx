@@ -93,7 +93,7 @@ function pantryStatusMessage(params: {
     const n = params.attentionCount;
     return {
       primary: `${n} quick ${n === 1 ? "check" : "checks"} waiting`,
-      secondary: `${params.totalItems} items in your pantry`,
+      secondary: `${params.totalItems} items in your kitchen`,
     };
   }
   const scanBit = params.lastScanText
@@ -520,7 +520,7 @@ export default function HomeScreen() {
             >
               <Feather name="bar-chart-2" size={14} color={D.greenMid} />
               <Text style={s.insightsLinkTxt}>
-                Weekly patterns & nutrition → Insights
+                See weekly patterns →
               </Text>
             </Pressable>
           )}
@@ -530,7 +530,7 @@ export default function HomeScreen() {
             <View style={s.emptyWrap}>
               <View style={s.emptyPreview}>
                 <View style={s.emptyPreviewHead}>
-                  <Text style={s.emptyPreviewLabel}>YOUR PANTRY WILL LOOK LIKE</Text>
+                  <Text style={s.emptyPreviewLabel}>YOUR KITCHEN WILL LOOK LIKE</Text>
                 </View>
                 {[
                   { name: "Olive Oil",     cat: "Condiments", qty: "x2", warn: false },

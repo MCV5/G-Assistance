@@ -200,7 +200,7 @@ export default function BarcodeScanScreen() {
   return (
     <View style={[styles.container, { backgroundColor: "#000" }]}>
       <CameraView
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         facing="back"
         barcodeScannerSettings={{
           barcodeTypes: [
@@ -248,7 +248,7 @@ export default function BarcodeScanScreen() {
 
       {busy ? (
         <View
-          style={[StyleSheet.absoluteFillObject, styles.busyOverlay]}
+          style={[StyleSheet.absoluteFill, styles.busyOverlay]}
           pointerEvents="auto"
         >
           <ActivityIndicator color="#fff" size="large" />

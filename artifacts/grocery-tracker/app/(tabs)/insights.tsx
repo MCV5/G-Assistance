@@ -120,10 +120,22 @@ export default function InsightsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <View style={[s.header, { paddingTop: topPad + 20 }]}>
-        <Text style={s.headerEyebrow}>FROM YOUR SCANS</Text>
-        <Text style={s.headerTitle}>Insights</Text>
+        <Pressable
+          onPress={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace("/(tabs)/pantry");
+          }}
+          style={s.backRow}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
+          <Feather name="chevron-left" size={20} color={D.cream} />
+          <Text style={s.backText}>Back</Text>
+        </Pressable>
+        <Text style={s.headerEyebrow}>FROM YOUR TRIPS</Text>
+        <Text style={s.headerTitle}>Patterns</Text>
         <Text style={s.headerSub}>
-          Shopping rhythms, restock timing, and pantry mix
+          How often you shop, what you buy, what may need restocking
         </Text>
       </View>
 
@@ -447,6 +459,18 @@ const s = StyleSheet.create({
     backgroundColor: D.greenMid,
     paddingHorizontal: 22,
     paddingBottom: 22,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginBottom: 10,
+    alignSelf: "flex-start",
+  },
+  backText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    color: "rgba(245,240,230,0.85)",
   },
   headerEyebrow: {
     fontFamily: "Inter_600SemiBold",

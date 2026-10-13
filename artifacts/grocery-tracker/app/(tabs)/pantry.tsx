@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import { useMemo, useRef, useState, useCallback } from "react";
 import {
   Alert,
@@ -77,7 +78,7 @@ export default function PantryScreen() {
       const preface =
         context === "wasted"
           ? "Sorry that went to waste."
-          : "Great — it's marked off your pantry.";
+          : "Great — it's marked off your kitchen.";
       Alert.alert(
         "Add to shopping list?",
         `${preface}\n\nRemember to buy "${item.name}" on your next trip?`,
@@ -234,8 +235,8 @@ export default function PantryScreen() {
       />
       <AddItemModal
         visible={addOpen}
-        title="Add to pantry"
-        submitLabel="Add to pantry"
+        title="Add to kitchen"
+        submitLabel="Add to kitchen"
         onClose={() => setAddOpen(false)}
         onSubmit={(name, category) => {
           addManualPantryItem(name, category);
@@ -244,12 +245,59 @@ export default function PantryScreen() {
       />
       <View style={{ paddingTop: topPad, paddingHorizontal: 20 }}>
         <View style={styles.headerRow}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Pantry</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: colors.foreground }]}>
+              Kitchen
+            </Text>
+            <Text
+              style={[styles.subtitle, { color: colors.mutedForeground }]}
+            >
+              What you have at home
+            </Text>
+          </View>
           <Pressable
             onPress={() => setAddOpen(true)}
             style={[styles.addBtn, { backgroundColor: colors.primary }]}
           >
             <Feather name="plus" size={20} color={colors.primaryForeground} />
+          </Pressable>
+        </View>
+        <View style={styles.cueRow}>
+          <Pressable
+            onPress={() => router.push("/(tabs)/scan")}
+            style={({ pressed }) => [
+              styles.cueBtn,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Scan receipt"
+          >
+            <Feather name="camera" size={14} color={colors.primary} />
+            <Text style={[styles.cueText, { color: colors.foreground }]}>
+              Scan receipt
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/(tabs)/insights")}
+            style={({ pressed }) => [
+              styles.cueBtn,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Weekly patterns"
+          >
+            <Feather name="bar-chart-2" size={14} color={colors.primary} />
+            <Text style={[styles.cueText, { color: colors.foreground }]}>
+              Patterns
+            </Text>
           </Pressable>
         </View>
         <View
@@ -262,7 +310,7 @@ export default function PantryScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search your pantry"
+            placeholder="Search your kitchen"
             placeholderTextColor={colors.mutedForeground}
             style={[styles.searchInput, { color: colors.foreground }]}
             autoCapitalize="none"
@@ -441,12 +489,12 @@ export default function PantryScreen() {
             icon="package"
             title={
               pantry.length === 0
-                ? "Your pantry is empty"
+                ? "Your kitchen is empty"
                 : "No matches"
             }
             subtitle={
               pantry.length === 0
-                ? "Scan a receipt or tap + to add items manually."
+                ? "Scan a receipt after a trip, or tap + to add items."
                 : "Try a different filter or search term."
             }
           />
@@ -495,12 +543,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
     fontFamily: "Inter_700Bold",
     fontSize: 28,
     letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontFamily: "Inter_400Regular",
+    fontSize: 13,
+    marginTop: 2,
   },
   addBtn: {
     width: 44,
@@ -508,6 +561,24 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+  },
+  cueRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  cueBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  cueText: {
+    fontFamily: "Inter_500Medium",
+    fontSize: 12,
   },
   searchBox: {
     flexDirection: "row",

@@ -7,7 +7,6 @@ import {
   FlatList,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -44,10 +43,10 @@ type PantryListRow =
       members: PantryItem[];
     };
 
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "All" },
-  { key: "need", label: "Need" },
-  ...CATEGORIES.map((c) => ({ key: c, label: c })),
+const SORTS: { key: SortMode; label: string }[] = [
+  { key: "need", label: "Soonest" },
+  { key: "recent", label: "Newest" },
+  { key: "az", label: "A–Z" },
 ];
 
 export default function PantryScreen() {
@@ -68,10 +67,14 @@ export default function PantryScreen() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("need");
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [actionItem, setActionItem] = useState<PantryItem | null>(null);
   const [selectedItem, setSelectedItem] = useState<PantryItem | null>(null);
+
+  const activeCount = pantry.filter((p) => !p.consumed).length;
+  const categoryFilter = filter !== "all" && filter !== "need" ? filter : null;
 
   const promptAddToShoppingList = useCallback(
     (item: PantryItem, context: "used" | "wasted") => {
@@ -111,7 +114,6 @@ export default function PantryScreen() {
   );
 
   const rows = useMemo<PantryListRow[]>(() => {
-    // Active pantry only — finished items leave the main list (insights still has history)
     let list = pantry.filter((p) => !p.consumed);
     if (filter === "need") {
       list = list.filter((p) => {
@@ -184,14 +186,23 @@ export default function PantryScreen() {
       }
     }
     return output;
-  }, [pantry, filter, search, sortMode]);
+  }, [pantry, filter, search, sortMode, predictionCtx]);
 
   const isWeb = Platform.OS === "web";
-  const topPad = isWeb ? 67 : insets.top + 12;
+  const topPad = isWeb ? 24 : insets.top + 12;
+
+  const setScope = (next: "all" | "need") => {
+    setFilter(next);
+    setCategoryOpen(false);
+  };
+
+  const setCategory = (cat: Category) => {
+    setFilter(cat);
+    setCategoryOpen(false);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
-      {/* Quick action sheet — opens on tap */}
       <ItemActionSheet
         item={actionItem}
         onClose={() => setActionItem(null)}
@@ -205,7 +216,6 @@ export default function PantryScreen() {
         onViewDetails={(item) => setSelectedItem(item)}
       />
 
-      {/* Full detail sheet — opens from "View Details" */}
       <ItemDetailSheet
         item={selectedItem}
         onClose={() => setSelectedItem(null)}
@@ -243,169 +253,249 @@ export default function PantryScreen() {
           setAddOpen(false);
         }}
       />
-      <View style={{ paddingTop: topPad, paddingHorizontal: 20 }}>
-        <View style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.title, { color: colors.foreground }]}>
-              Kitchen
-            </Text>
-            <Text
-              style={[styles.subtitle, { color: colors.mutedForeground }]}
-            >
-              What you have at home
-            </Text>
-          </View>
-          <Pressable
-            onPress={() => setAddOpen(true)}
-            style={[styles.addBtn, { backgroundColor: colors.primary }]}
-          >
-            <Feather name="plus" size={20} color={colors.primaryForeground} />
-          </Pressable>
-        </View>
-        <View style={styles.cueRow}>
-          <Pressable
-            onPress={() => router.push("/(tabs)/scan")}
-            style={({ pressed }) => [
-              styles.cueBtn,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.card,
-                opacity: pressed ? 0.9 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Scan receipt"
-          >
-            <Feather name="camera" size={14} color={colors.primary} />
-            <Text style={[styles.cueText, { color: colors.foreground }]}>
-              Scan receipt
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => router.push("/(tabs)/insights")}
-            style={({ pressed }) => [
-              styles.cueBtn,
-              {
-                borderColor: colors.border,
-                backgroundColor: colors.card,
-                opacity: pressed ? 0.9 : 1,
-              },
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="How you eat"
-          >
-            <Feather name="bar-chart-2" size={14} color={colors.primary} />
-            <Text style={[styles.cueText, { color: colors.foreground }]}>
-              How you eat
-            </Text>
-          </Pressable>
-        </View>
-        <View
-          style={[
-            styles.searchBox,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Feather name="search" size={16} color={colors.mutedForeground} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search your kitchen"
-            placeholderTextColor={colors.mutedForeground}
-            style={[styles.searchInput, { color: colors.foreground }]}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {search ? (
-            <Pressable onPress={() => setSearch("")}>
-              <Feather name="x" size={16} color={colors.mutedForeground} />
-            </Pressable>
-          ) : null}
-        </View>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingVertical: 12, gap: 8 }}
-        >
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={[
-                  styles.chip,
-                  {
-                    backgroundColor: active ? colors.primary : colors.card,
-                    borderColor: active ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.chipText,
-                    {
-                      color: active
-                        ? colors.primaryForeground
-                        : colors.foreground,
-                    },
-                  ]}
-                >
-                  {f.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 10, gap: 8 }}
-        >
-          {[
-            { key: "need", label: "Need soon" },
-            { key: "recent", label: "Recent" },
-            { key: "az", label: "A-Z" },
-          ].map((srt) => {
-            const active = sortMode === srt.key;
-            return (
-              <Pressable
-                key={srt.key}
-                onPress={() => setSortMode(srt.key as SortMode)}
-                style={[
-                  styles.sortChip,
-                  {
-                    backgroundColor: colors.card,
-                    borderColor: active ? colors.primary : colors.border,
-                  },
-                ]}
-              >
-                {active && (
-                  <Feather name="check" size={11} color={colors.primary} />
-                )}
-                <Text
-                  style={[
-                    styles.sortChipText,
-                    {
-                      color: active ? colors.primary : colors.mutedForeground,
-                    },
-                  ]}
-                >
-                  {srt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </View>
+
       <FlatList
         data={rows}
         keyExtractor={(row) => (row.kind === "item" ? row.item.id : row.id)}
         contentContainerStyle={{
+          paddingTop: topPad,
           paddingHorizontal: 20,
           paddingBottom: 120,
-          gap: 7,
+          gap: 8,
         }}
+        ListHeaderComponent={
+          <View style={styles.header}>
+            <View style={styles.headerRow}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text
+                  style={[styles.title, { color: colors.foreground }]}
+                  numberOfLines={1}
+                >
+                  Kitchen
+                </Text>
+                <Text
+                  style={[styles.subtitle, { color: colors.mutedForeground }]}
+                  numberOfLines={1}
+                >
+                  {activeCount === 0
+                    ? "What you have at home"
+                    : `${activeCount} item${activeCount === 1 ? "" : "s"} at home`}
+                </Text>
+              </View>
+              <View style={styles.headerActions}>
+                <Pressable
+                  onPress={() => router.push("/(tabs)/scan")}
+                  style={[
+                    styles.iconBtn,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Scan receipt"
+                >
+                  <Feather name="camera" size={18} color={colors.foreground} />
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push("/(tabs)/insights")}
+                  style={[
+                    styles.iconBtn,
+                    { backgroundColor: colors.card, borderColor: colors.border },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="How you eat"
+                >
+                  <Feather name="bar-chart-2" size={18} color={colors.foreground} />
+                </Pressable>
+                <Pressable
+                  onPress={() => setAddOpen(true)}
+                  style={[styles.iconBtn, { backgroundColor: colors.primary, borderWidth: 0 }]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Add item"
+                >
+                  <Feather name="plus" size={20} color={colors.primaryForeground} />
+                </Pressable>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.searchBox,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              <Feather name="search" size={16} color={colors.mutedForeground} />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search items"
+                placeholderTextColor={colors.mutedForeground}
+                style={[styles.searchInput, { color: colors.foreground }]}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {search ? (
+                <Pressable onPress={() => setSearch("")} accessibilityLabel="Clear search">
+                  <Feather name="x" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              ) : null}
+            </View>
+
+            <View style={styles.scopeRow}>
+              <Pressable
+                onPress={() => setScope("all")}
+                style={[
+                  styles.scopeChip,
+                  {
+                    backgroundColor: filter === "all" ? colors.primary : colors.card,
+                    borderColor: filter === "all" ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.scopeChipText,
+                    {
+                      color:
+                        filter === "all"
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                    },
+                  ]}
+                >
+                  All
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setScope("need")}
+                style={[
+                  styles.scopeChip,
+                  {
+                    backgroundColor: filter === "need" ? colors.primary : colors.card,
+                    borderColor: filter === "need" ? colors.primary : colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.scopeChipText,
+                    {
+                      color:
+                        filter === "need"
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                    },
+                  ]}
+                >
+                  Running low
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setCategoryOpen((open) => !open)}
+                style={[
+                  styles.scopeChip,
+                  styles.categoryChip,
+                  {
+                    backgroundColor: categoryFilter ? colors.primary : colors.card,
+                    borderColor: categoryFilter ? colors.primary : colors.border,
+                  },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Filter by category"
+              >
+                <Text
+                  style={[
+                    styles.scopeChipText,
+                    {
+                      color: categoryFilter
+                        ? colors.primaryForeground
+                        : colors.foreground,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {categoryFilter ?? "Category"}
+                </Text>
+                <Feather
+                  name={categoryOpen ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={
+                    categoryFilter
+                      ? colors.primaryForeground
+                      : colors.mutedForeground
+                  }
+                />
+              </Pressable>
+            </View>
+
+            {categoryOpen ? (
+              <View style={styles.categoryWrap}>
+                {CATEGORIES.map((cat) => {
+                  const active = filter === cat;
+                  return (
+                    <Pressable
+                      key={cat}
+                      onPress={() => setCategory(cat)}
+                      style={[
+                        styles.categoryTag,
+                        {
+                          backgroundColor: active ? colors.primary : colors.card,
+                          borderColor: active ? colors.primary : colors.border,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryTagText,
+                          {
+                            color: active
+                              ? colors.primaryForeground
+                              : colors.foreground,
+                          },
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+
+            <View
+              style={[
+                styles.sortRow,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
+              {SORTS.map((srt) => {
+                const active = sortMode === srt.key;
+                return (
+                  <Pressable
+                    key={srt.key}
+                    onPress={() => setSortMode(srt.key)}
+                    style={[
+                      styles.sortSeg,
+                      active && { backgroundColor: colors.background },
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text
+                      style={[
+                        styles.sortSegText,
+                        {
+                          color: active ? colors.foreground : colors.mutedForeground,
+                          fontFamily: active ? "Inter_600SemiBold" : "Inter_500Medium",
+                        },
+                      ]}
+                    >
+                      {srt.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        }
         renderItem={({ item: row }) =>
           row.kind === "item" ? (
             <SwipeableItemRow
@@ -442,17 +532,25 @@ export default function PantryScreen() {
                 >
                   <Feather name="layers" size={16} color={getCategoryTone(row.category)} />
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={styles.groupHead}>
-                    <Text style={[styles.groupTitle, { color: colors.foreground }]}>
+                    <Text
+                      style={[styles.groupTitle, { color: colors.foreground }]}
+                      numberOfLines={1}
+                    >
                       {row.label}
                     </Text>
                     <Text style={[styles.groupCount, { color: colors.mutedForeground }]}>
-                      {row.count} items
+                      {row.count}
                     </Text>
                   </View>
-                  <Text style={[styles.groupMeta, { color: colors.mutedForeground }]}>
-                    {row.category} · {row.dueInDays <= 0 ? "Need now" : `Need in ${row.dueInDays}d`}
+                  <Text
+                    style={[styles.groupMeta, { color: colors.mutedForeground }]}
+                    numberOfLines={1}
+                  >
+                    {row.category}
+                    {" · "}
+                    {row.dueInDays <= 0 ? "Need now" : `Need in ${row.dueInDays}d`}
                     {row.organicCount > 0 ? ` · ${row.organicCount} organic` : ""}
                   </Text>
                 </View>
@@ -466,7 +564,6 @@ export default function PantryScreen() {
                 ? row.members.map((member) => (
                     <View key={member.id} style={styles.groupChildWrap}>
                       <SwipeableItemRow
-                        key={member.id}
                         item={member}
                         onPress={() => setActionItem(member)}
                         onAddToList={() => {
@@ -539,11 +636,14 @@ function SwipeableItemRow({
 }
 
 const styles = StyleSheet.create({
+  header: {
+    gap: 12,
+    marginBottom: 12,
+  },
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
+    gap: 12,
   },
   title: {
     fontFamily: "Inter_700Bold",
@@ -555,30 +655,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     marginTop: 2,
   },
-  addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-  },
-  cueRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 12,
-  },
-  cueBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 999,
     borderWidth: 1,
-  },
-  cueText: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 12,
   },
   searchBox: {
     flexDirection: "row",
@@ -593,28 +682,59 @@ const styles = StyleSheet.create({
     flex: 1,
     fontFamily: "Inter_400Regular",
     fontSize: 15,
+    minWidth: 0,
   },
-  chip: {
+  scopeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  scopeChip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
   },
-  chipText: {
+  scopeChipText: {
     fontFamily: "Inter_500Medium",
     fontSize: 13,
   },
-  sortChip: {
+  categoryChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    maxWidth: "100%",
+  },
+  categoryWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  categoryTag: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     borderRadius: 999,
     borderWidth: 1,
   },
-  sortChipText: {
+  categoryTagText: {
     fontFamily: "Inter_500Medium",
+    fontSize: 12,
+  },
+  sortRow: {
+    flexDirection: "row",
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 3,
+  },
+  sortSeg: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
+    borderRadius: 9,
+    minWidth: 0,
+  },
+  sortSegText: {
     fontSize: 12,
   },
   groupRow: {
@@ -657,4 +777,3 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
   },
 });
-

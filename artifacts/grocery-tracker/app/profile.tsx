@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import { patchMyProfile } from "@workspace/api-client-react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
@@ -13,6 +14,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   View,
 } from "react-native";
@@ -90,6 +92,7 @@ export default function ProfileScreen() {
   const [savingDietary, setSavingDietary] = useState(false);
   const [savingHousehold, setSavingHousehold] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const prefsLoadedRef = React.useRef(false);
 
   const loadPrefs = useCallback(async () => {
@@ -210,14 +213,9 @@ export default function ProfileScreen() {
     } catch {}
   };
 
-  const onProPress = () => {
-    console.log("[profile] Plans / Pro — stub (Phase A)");
-    Alert.alert("Go Pro", "Plans are not available yet. Check back soon.");
-  };
-
   const onExport = async () => {
     if (pantry.length === 0) {
-      Alert.alert("Nothing to export", "Your pantry is empty.");
+      Alert.alert("Nothing to export", "Your kitchen is empty.");
       return;
     }
     setExporting(true);
@@ -229,20 +227,20 @@ export default function ProfileScreen() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
-          a.download = "pantry_export.csv";
+          a.download = "kitchen_export.csv";
           a.click();
           URL.revokeObjectURL(url);
         }
         return;
       }
-      const path = `${FileSystem.cacheDirectory ?? ""}pantry_export.csv`;
+      const path = `${FileSystem.cacheDirectory ?? ""}kitchen_export.csv`;
       await FileSystem.writeAsStringAsync(path, csv, {
         encoding: "utf8",
       });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(path, {
           mimeType: "text/csv",
-          dialogTitle: "Export pantry",
+          dialogTitle: "Export kitchen",
           UTI: "public.comma-separated-values-text",
         });
       } else {
@@ -272,15 +270,34 @@ export default function ProfileScreen() {
     }
   };
 
+  const performLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      router.replace("/login");
+    } catch {
+      setLoggingOut(false);
+      Alert.alert("Couldn’t log out", "Please try again.");
+    }
+  };
+
   const onLogout = () => {
+    if (loggingOut) return;
+    if (Platform.OS === "web") {
+      const ok =
+        typeof window !== "undefined" &&
+        window.confirm("Log out of Goalcery?");
+      if (ok) void performLogout();
+      return;
+    }
     Alert.alert("Log out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Log out",
         style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/login");
+        onPress: () => {
+          void performLogout();
         },
       },
     ]);
@@ -297,11 +314,17 @@ export default function ProfileScreen() {
       >
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => {
+              if (router.canGoBack()) router.back();
+              else router.replace("/(tabs)");
+            }}
             hitSlop={12}
             style={styles.backRow}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
           >
-            <Text style={styles.backText}>← Back</Text>
+            <Feather name="chevron-left" size={20} color={c.cream} />
+            <Text style={styles.backText}>Back</Text>
           </Pressable>
           <View style={styles.headerCenter}>
             {user.profileImageUrl ? (
@@ -315,7 +338,7 @@ export default function ProfileScreen() {
               </View>
             )}
             <Text style={styles.name} numberOfLines={1}>
-              {displayName.toUpperCase()}
+              {displayName}
             </Text>
             {user.email ? (
               <Text style={styles.email} numberOfLines={1}>
@@ -328,72 +351,91 @@ export default function ProfileScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCell}>
             <Text style={styles.statNum}>{pantryCount}</Text>
-            <Text style={styles.statLabel}>ITEMS IN PANTRY</Text>
+            <Text style={styles.statLabel}>In kitchen</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCell}>
             <Text style={styles.statNum}>{scansThisMonth}</Text>
-            <Text style={styles.statLabel}>SCANS THIS MO.</Text>
+            <Text style={styles.statLabel}>Scans this month</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statCell}>
             <Text style={styles.statNum}>{memberLabel}</Text>
-            <Text style={styles.statLabel}>MEMBER SINCE</Text>
+            <Text style={styles.statLabel}>With us</Text>
           </View>
         </View>
 
         <View style={styles.body}>
-          <Pressable style={styles.proCard} onPress={onProPress}>
-            <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={styles.proEyebrow}>UPGRADE</Text>
-              <Text style={styles.proTitle}>Go Pro</Text>
-              <Text style={styles.proSub}>
-                Recipes, nutrition AI & smart suggestions
-              </Text>
-            </View>
-            <View style={styles.proBtn}>
-              <Text style={styles.proBtnText}>SEE PLANS →</Text>
-            </View>
-          </Pressable>
-
-          <Text style={styles.sectionLabel}>PREFERENCES</Text>
+          <Text style={styles.sectionLabel}>YOUR HOME</Text>
 
           <RowButton
-            emoji="🥗"
+            icon="bar-chart-2"
+            title="How you eat"
+            subtitle="Habits from what you buy"
+            onPress={() => router.push("/(tabs)/insights")}
+          />
+          <RowButton
+            icon="grid"
+            title="Kitchen"
+            subtitle={
+              pantryCount === 0
+                ? "Nothing tracked yet"
+                : `${pantryCount} item${pantryCount === 1 ? "" : "s"} at home`
+            }
+            onPress={() => router.push("/(tabs)/pantry")}
+          />
+
+          <Text style={[styles.sectionLabel, { marginTop: 10 }]}>PREFERENCES</Text>
+
+          <RowButton
+            icon="heart"
             title="Dietary goals"
             subtitle={dietarySubtitle}
             onPress={openDietary}
           />
+          <View style={styles.rowBtn}>
+            <View style={styles.rowLeft}>
+              <View style={styles.rowIcon}>
+                <Feather name="bell" size={18} color={c.cream} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.rowTitle}>Low-stock alerts</Text>
+                <Text style={styles.rowSub}>
+                  {expiryAlerts ? "On — we’ll nudge you" : "Off"}
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={expiryAlerts}
+              onValueChange={() => {
+                void toggleExpiryPref();
+              }}
+              trackColor={{ false: c.creamBorder, true: c.greenAccent }}
+              thumbColor={c.cream}
+              accessibilityLabel="Low-stock alerts"
+            />
+          </View>
           <RowButton
-            emoji="🔔"
-            title="Notifications"
-            subtitle={expiryAlerts ? "Expiry alerts on" : "Expiry alerts off"}
-            onPress={toggleExpiryPref}
-            chevron={false}
-          />
-          <RowButton
-            emoji="👨‍👩‍👧"
+            icon="users"
             title="Household size"
             subtitle={householdSubtitle}
             onPress={openHousehold}
           />
 
-          <Text style={[styles.sectionLabel, { marginTop: 6 }]}>ACCOUNT</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 10 }]}>ACCOUNT</Text>
 
           <RowButton
-            emoji="🔑"
+            icon="lock"
             title="Change password"
-            subtitle="Reset via email"
+            subtitle="We’ll email a reset link"
             onPress={() => {
               void onResetPassword();
             }}
           />
           <RowButton
-            emoji="📦"
-            title="Export my data"
-            subtitle={
-              exporting ? "Preparing file…" : "Download as CSV"
-            }
+            icon="download"
+            title="Export my kitchen"
+            subtitle={exporting ? "Preparing file…" : "Download as CSV"}
             onPress={() => {
               void onExport();
             }}
@@ -405,11 +447,20 @@ export default function ProfileScreen() {
           <View style={styles.hRule} />
 
           <Pressable
-            style={styles.logoutBtn}
+            style={({ pressed }) => [
+              styles.logoutBtn,
+              { opacity: loggingOut ? 0.6 : pressed ? 0.85 : 1 },
+            ]}
             onPress={onLogout}
-            disabled={exporting}
+            disabled={exporting || loggingOut}
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
           >
-            <Text style={styles.logoutText}>Log out</Text>
+            {loggingOut ? (
+              <ActivityIndicator color={c.inkMid} />
+            ) : (
+              <Text style={styles.logoutText}>Log out</Text>
+            )}
           </Pressable>
         </View>
       </ScrollView>
@@ -524,7 +575,7 @@ export default function ProfileScreen() {
 }
 
 function RowButton(props: {
-  emoji: string;
+  icon: React.ComponentProps<typeof Feather>["name"];
   title: string;
   subtitle: string;
   onPress: () => void;
@@ -533,7 +584,7 @@ function RowButton(props: {
   trailing?: React.ReactNode;
 }) {
   const {
-    emoji,
+    icon,
     title,
     subtitle,
     onPress,
@@ -552,16 +603,22 @@ function RowButton(props: {
     >
       <View style={styles.rowLeft}>
         <View style={styles.rowIcon}>
-          <Text style={styles.rowIconTxt}>{emoji}</Text>
+          <Feather name={icon} size={18} color={c.cream} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.rowTitle}>{title}</Text>
-          <Text style={styles.rowSub}>{subtitle}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.rowTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.rowSub} numberOfLines={1}>
+            {subtitle}
+          </Text>
         </View>
       </View>
       <View style={styles.rowRight}>
         {trailing}
-        {chevron ? <Text style={styles.chevron}>›</Text> : null}
+        {chevron ? (
+          <Feather name="chevron-right" size={18} color={c.inkMuted} />
+        ) : null}
       </View>
     </Pressable>
   );
@@ -574,12 +631,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 20,
   },
-  backRow: { alignSelf: "flex-start", marginBottom: 8 },
+  backRow: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    marginBottom: 8,
+  },
   backText: {
     fontFamily: "Inter_500Medium",
     fontSize: 14,
-    color: c.greenLight,
-    opacity: 0.95,
+    color: "rgba(245,240,230,0.85)",
   },
   headerCenter: { alignItems: "center" },
   avatar: {
@@ -602,17 +664,19 @@ const styles = StyleSheet.create({
   },
   name: {
     fontFamily: "Inter_700Bold",
-    fontSize: 16,
+    fontSize: 20,
     color: c.cream,
     marginTop: 10,
-    letterSpacing: 0.3,
+    letterSpacing: -0.3,
+    paddingHorizontal: 16,
   },
   email: {
     fontFamily: "Inter_400Regular",
-    fontSize: 11,
+    fontSize: 13,
     color: c.greenLight,
-    opacity: 0.45,
+    opacity: 0.75,
     marginTop: 4,
+    paddingHorizontal: 16,
   },
   statsRow: {
     flexDirection: "row",
@@ -629,54 +693,17 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontFamily: "Inter_400Regular",
-    fontSize: 9,
+    fontSize: 11,
     color: c.greenLight,
-    opacity: 0.75,
+    opacity: 0.8,
     marginTop: 4,
     textAlign: "center",
+    paddingHorizontal: 4,
   },
   body: {
     paddingHorizontal: 14,
     paddingTop: 12,
     backgroundColor: c.cream,
-  },
-  proCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: c.greenDeep,
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 18,
-  },
-  proEyebrow: {
-    fontFamily: "Inter_500Medium",
-    fontSize: 10,
-    color: c.inkMuted,
-    letterSpacing: 0.5,
-  },
-  proTitle: {
-    fontFamily: "Inter_700Bold",
-    fontSize: 17,
-    color: c.greenLight,
-    marginTop: 2,
-  },
-  proSub: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 10,
-    color: c.inkMuted,
-    marginTop: 4,
-    lineHeight: 14,
-  },
-  proBtn: {
-    backgroundColor: c.greenAccent,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  proBtnText: {
-    fontFamily: "Inter_600SemiBold",
-    fontSize: 11,
-    color: c.greenDeep,
   },
   sectionLabel: {
     fontFamily: "Inter_600SemiBold",
@@ -690,22 +717,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: c.creamCard,
-    borderRadius: 8,
+    borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 12,
     marginBottom: 8,
+    gap: 10,
   },
-  rowLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  rowRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  rowLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1, minWidth: 0 },
+  rowRight: { flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
   rowIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: c.greenMid,
     alignItems: "center",
     justifyContent: "center",
   },
-  rowIconTxt: { fontSize: 18 },
   rowTitle: {
     fontFamily: "Inter_600SemiBold",
     fontSize: 14,
@@ -716,11 +743,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: c.inkMuted,
     marginTop: 2,
-  },
-  chevron: {
-    fontSize: 22,
-    color: c.inkMuted,
-    marginLeft: 8,
   },
   hRule: {
     height: 1,

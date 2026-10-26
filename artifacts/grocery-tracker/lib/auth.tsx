@@ -219,12 +219,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    try {
-      await apiLogout();
-    } catch {}
     await clearToken();
     setUser(null);
     setPendingRecoveryCode(null);
+    try {
+      await apiLogout();
+    } catch {}
   }, []);
 
   const acknowledgeRecoveryCode = useCallback(() => {
